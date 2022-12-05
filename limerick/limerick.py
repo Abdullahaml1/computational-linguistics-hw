@@ -21,9 +21,25 @@ class LimerickDetector:
         Returns the number of syllables in a word.  If there's more than one
         pronunciation, take the shorter one.  If there is no entry in the
         dictionary, return 1.
+        (the number of syllables is the number of the vowle sounds in the 
+        word)
         """
+        if not (word in self._pronunciations):
+            return 1
+        else:
+            phonemes_list = self._pronunciations[word]
+            small_count = None # counting vowle sounds
+            for word_phonemes in phonemes_list:
+                count =0
+                for p in word_phonemes:
+                    if p[-1].isdigit(): # is a vowle  sound
+                        count +=1
+                small_count = count if small_count==None else min(count, small_count)
 
-        return 1
+
+            return small_count
+
+
 
     def rhymes(self, a, b):
         """
@@ -57,3 +73,10 @@ if __name__ == "__main__":
 
     ld = LimerickDetector()
     print("%s\n-----------\n%s" % (buffer.strip(), ld.is_limerick(buffer)))
+
+
+    # """
+    # Test num_syllables
+    # """
+    # print(ld.num_syllables('fire'))
+
