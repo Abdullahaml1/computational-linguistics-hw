@@ -5,7 +5,7 @@
 from string import punctuation
 
 import nltk
-from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.tokenize import word_tokenize
 
 
 class LimerickDetector:
@@ -105,11 +105,24 @@ class LimerickDetector:
         words_list = word_tokenize(sent)
 
         #removing punctuatoin
-        for char in punctuation:
-            if char in words_list:
-                words_list.remove(char)
+        i=0
+        while i<len(words_list):
+            if words_list[i] in punctuation:
+                del words_list[i]
+            else:
+                i+=1
 
-        return words_list
+        # handling words with apostphe "'" ie: can't
+        # the tokenizer will return ["ca", "n't"] we will ->>> ["can't"]
+        refined_words_list = []
+        for i in range(len(words_list)):
+            if "'" in words_list[i]:
+                del refined_words_list[-1] # remove last word
+                refined_words_list.append("".join(words_list[i-1:i+1]))
+            else:
+                refined_words_list.append(words_list[i])
+
+        return refined_words_list
 
 
 
@@ -127,23 +140,42 @@ class LimerickDetector:
         (English professors may disagree with this definition, but that's what
         we're using here.)
         """
-        sent_list = sent_tokenize(text)
+        words_list = self.split_words_and_remove_punctuation(text)
+        A_rhyme = words_list[-1]
+        count_A_rhyme =0
+        last_A_rhyme_pos=0
+        sent_length =4
 
-        # limerick poerm consits of 5 sentences
-        if len(sent_list) != 5:
+        print(words_list)
+        # Counting A rhyme
+        i=sent_length #min sentence length
+        while i< len(words_list)-1:
+            if self.rhymes(words_list[i], A_rhyme):
+                count_A_rhyme +=1
+                last_A_rhyme_pos = i
+                i +=sent_length # min sentence length
+            else:
+                i+=1
+
+            if count_A_rhyme ==2:
+                break
+
+        # print (count_A_rhyme)
+        # print(words_list[last_A_rhyme_pos], ", ", i)
+        if count_A_rhyme !=2:
             return False
 
-        rhymes_words_list =[]
-        for sent in sent_list:
-            # get the last word of the snetence
-            rhymes_words_list.append(
-                    self.split_words_and_remove_punctuation(sent)[-1])
+        # getting B rhyme
+        for i in range(last_A_rhyme_pos+1+sent_length, len(words_list)-1, 1):
+            for j in range(i+sent_length, len(words_list)-1, 1):
+                if self.rhymes(words_list[i], words_list[j]):
+                    return True
 
-        return (self.rhymes(rhymes_words_list[0], rhymes_words_list[1]) and
-                self.rhymes(rhymes_words_list[0], rhymes_words_list[4]) and
-                self.rhymes(rhymes_words_list[1], rhymes_words_list[4]) and
-                self.rhymes(rhymes_words_list[2], rhymes_words_list[3])
-                )
+
+        return False
+
+
+
 
 
 
@@ -181,7 +213,7 @@ if __name__ == "__main__":
     # split words test
     # """
     # ld = LimerickDetector()
-    # print(ld.split_words_and_remove_punctuation('This was a nice day.!'))
+    # print(ld.split_words_and_remove_punctuation("I'm not can't do.!"))
 
 
     """
