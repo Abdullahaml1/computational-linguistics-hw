@@ -6,11 +6,11 @@ from numpy import mean
 
 import nltk
 from nltk import FreqDist
-from nltk.util import bigrams
+from nltk import bigrams
 from nltk.tokenize import TreebankWordTokenizer
 
 kLM_ORDER = 2
-kUNK_CUTOFF = 3
+kUNK_CUTOFF = 3 #3
 kNEG_INF = -1e6
 
 kSTART = "<s>"
@@ -38,7 +38,18 @@ class BigramLanguageModel:
         
         # Add your code here!
 
+        #setting unknow words with 0
+        def defaultdict_handle():
+            return 0
+        self._vocab_dict = defaultdict(defaultdict_handle)
+        self._unigram_dict = defaultdict(defaultdict_handle)
+        self._bigram_dict = defaultdict(defaultdict_handle)
+
+        self._unk_token = 'UNK'
+        self._unigram_count =0
+
     def train_seen(self, word, count=1):
+
         """
         Tells the language model that a word has been seen @count times.  This
         will be used to build the final vocabulary.
@@ -46,7 +57,14 @@ class BigramLanguageModel:
         assert not self._vocab_final, \
             "Trying to add new words to finalized vocab"
 
+
         # Add your code here!            
+        self._vocab_dict[self._normalizer(word)] += count
+
+
+    def get_vocab_len(self):
+        return len(self._unigram_dict)
+        
 
     def tokenize(self, sent):
         """
@@ -67,7 +85,11 @@ class BigramLanguageModel:
             "Vocab must be finalized before looking up words"
 
         # Add your code here
-        return -1
+        # remove the word below threshold and adding the unknow token
+        if (self._vocab_dict[word] < self._unk_cutoff ) and (word != kSTART) and (word != kEND):
+            return self._unk_token
+
+        return word
 
     def finalize(self):
         """
@@ -101,15 +123,25 @@ class BigramLanguageModel:
         return self._normalizer(word)
 
 
+
     def mle(self, context, word):
         """
+        MLE (Maximum Liklehod)
         Return the log MLE estimate of a word given a context.  If the
         MLE would be negative infinity, use kNEG_INF
+        (((( WITH OUT THE USE of UNKOWN TOKEN))))
         """
 
         # This initially return 0.0, ignoring the word and context.
         # Modify this code to return the correct value.
-        return 0.0
+        numerator = self._bigram_dict[context, word]
+        denomirator = self._unigram_dict[context]
+
+
+        if (numerator == 0) or (denomirator == 0):
+            return kNEG_INF
+
+        return lg(float(numerator)/denomirator)
 
     def laplace(self, context, word):
         """
@@ -118,17 +150,35 @@ class BigramLanguageModel:
 
         # This initially return 0.0, ignoring the word and context.
         # Modify this code to return the correct value.
-        return 0.0
+        numerator = self._bigram_dict[context, word] + 1
+        denomirator = self._unigram_dict[context] +  \
+        len(self._unigram_dict)
+
+        return lg(float(numerator)/denomirator)
+
 
     def jelinek_mercer(self, context, word):
         """
         Return the Jelinek-Mercer log probability estimate of a word
         given a context; interpolates context probability with the
         overall corpus probability.
+        sum(all lambda) =1
         """
         # This initially return 0.0, ignoring the word and context.
         # Modify this code to return the correct value.
-        return 0.0
+        
+        # uingram probability
+        # unigram_prob = float(self._unigram_dict[word])/len(self._unigram_dict)
+        unigram_prob = float(self._unigram_dict[word])/self._unigram_count
+
+
+        # bigram Probability
+        bigram_prob = float(self._bigram_dict[context, word]) / \
+                self._unigram_dict[context]
+
+
+        return lg((1- self._jm_lambda) * unigram_prob +
+                self._jm_lambda * bigram_prob)
 
     def kneser_ney(self, context, word):
         """
@@ -141,12 +191,19 @@ class BigramLanguageModel:
 
     def dirichlet(self, context, word):
         """
+        Add K smoothing
         Additive smoothing, assuming independent Dirichlets with fixed
         hyperparameter.
         """
         # This initially return 0.0, ignoring the word and context.
         # Modify this code to return the correct value.
-        return 0.0
+        numerator = self._bigram_dict[context, word] + \
+                self._dirichlet_alpha
+        denomirator = self._unigram_dict[context] +  \
+            self._dirichlet_alpha * float(len(self._unigram_dict))
+
+        return lg(float(numerator)/denomirator)
+
 
     def add_train(self, sentence):
         """
@@ -155,8 +212,15 @@ class BigramLanguageModel:
 
         # You'll need to complete this function, but here's a line of
         # code that will hopefully get you started.
+
         for context, word in bigrams(self.tokenize_and_censor(sentence)):
-            None
+            self._bigram_dict[context, word] +=1
+
+        for word in self.tokenize_and_censor(sentence):
+            self._unigram_dict[word] +=1
+            self._unigram_count += 1
+
+
 
     def perplexity(self, sentence, method):
         """
@@ -223,6 +287,10 @@ if __name__ == "__main__":
     print("Done looking at all the words, finalizing vocabulary")
     lm.finalize()
 
+    print('Vocabulary before adding unkown token')
+    print(lm.get_vocab_len())
+
+
     sentence_count = 0
     for ii in nltk.corpus.brown.sents():
         sentence_count += 1
@@ -231,13 +299,21 @@ if __name__ == "__main__":
         if args.brown_limit > 0 and sentence_count >= args.brown_limit:
             break
 
-    print("Trained language model with %i sentences from Brown corpus." % sentence_count)
-    assert args.method in ['kneser_ney', 'mle', 'dirichlet', \
-                           'jelinek_mercer', 'good_turing', 'laplace'], \
-      "Invalid estimation method"
 
-    sent = input()
-    while sent:
-        print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
-        print(lm.perplexity(sent, getattr(lm, args.method)))
-        sent = input()
+    print('Vocabulary after adding unkown token')
+    print(lm.get_vocab_len())
+
+    print('counts  of unkown token=', lm._unigram_dict[lm._unk_token])
+    print('counts of word "the"=', lm._unigram_dict['the'])
+    print('counts of word "directional"=', lm._unigram_dict['directional'])
+
+    print("Trained language model with %i sentences from Brown corpus." % sentence_count)
+    # assert args.method in ['kneser_ney', 'mle', 'dirichlet', \
+    #                        'jelinek_mercer', 'good_turing', 'laplace'], \
+    #   "Invalid estimation method"
+
+    # sent = input()
+    # while sent:
+    #     print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
+    #     print(lm.perplexity(sent, getattr(lm, args.method)))
+    #     sent = input()
