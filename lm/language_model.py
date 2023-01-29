@@ -41,12 +41,20 @@ class BigramLanguageModel:
         #setting unknow words with 0
         def defaultdict_handle():
             return 0
+
+        def bigram_dict_handle():
+            return defaultdict(defaultdict_handle)
+
         self._vocab_dict = defaultdict(defaultdict_handle)
         self._unigram_dict = defaultdict(defaultdict_handle)
         self._bigram_dict = defaultdict(defaultdict_handle)
 
+        self._bigram_word_key = defaultdict(bigram_dict_handle)
+        self._bigram_context_key = defaultdict(bigram_dict_handle)
+
         self._unk_token = 'UNK'
         self._unigram_count =0
+        self._bigram_types_count = 0
 
     def train_seen(self, word, count=1):
 
@@ -168,8 +176,8 @@ class BigramLanguageModel:
         # Modify this code to return the correct value.
         
         # uingram probability
-        # unigram_prob = float(self._unigram_dict[word])/len(self._unigram_dict)
-        unigram_prob = float(self._unigram_dict[word])/self._unigram_count
+        unigram_prob = float(self._unigram_dict[word])/len(self._unigram_dict)
+        # unigram_prob = float(self._unigram_dict[word])/self._unigram_count
 
 
         # bigram Probability
@@ -187,7 +195,28 @@ class BigramLanguageModel:
         """
         # This initially return 0.0, ignoring the word and context.
         # Modify this code to return the correct value.
-        return 0.0
+        d = self._kn_discount
+        theta = self._kn_concentration
+
+        prob1 = max(self._bigram_dict[context, word] - d, 0) / (
+                self._unigram_dict[context] + theta)
+
+        lam1 = (theta + d* len(self._bigram_context_key[context])) / ( 
+            theta + self._unigram_dict[context])
+
+        prob2 = max(len(self._bigram_word_key[word]) -d,0) / (
+                self._bigram_types_count + theta)
+
+        lam2 = (theta + d*len(self._bigram_word_key)) / (
+                self._bigram_types_count + theta)
+
+        prob3 = 1 / len(self._unigram_dict)
+
+        p = prob1 + lam1 * (prob2 + lam2 * prob3)
+        return lg(p)
+
+
+
 
     def dirichlet(self, context, word):
         """
@@ -215,6 +244,11 @@ class BigramLanguageModel:
 
         for context, word in bigrams(self.tokenize_and_censor(sentence)):
             self._bigram_dict[context, word] +=1
+
+            if self._bigram_word_key[word][context] == 0:
+                self._bigram_types_count +=1
+            self._bigram_word_key[word][context] +=1
+            self._bigram_context_key[context][word] +=1
 
         for word in self.tokenize_and_censor(sentence):
             self._unigram_dict[word] +=1
@@ -308,12 +342,12 @@ if __name__ == "__main__":
     print('counts of word "directional"=', lm._unigram_dict['directional'])
 
     print("Trained language model with %i sentences from Brown corpus." % sentence_count)
-    # assert args.method in ['kneser_ney', 'mle', 'dirichlet', \
-    #                        'jelinek_mercer', 'good_turing', 'laplace'], \
-    #   "Invalid estimation method"
+    assert args.method in ['kneser_ney', 'mle', 'dirichlet', \
+                           'jelinek_mercer', 'good_turing', 'laplace'], \
+      "Invalid estimation method"
 
-    # sent = input()
-    # while sent:
-    #     print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
-    #     print(lm.perplexity(sent, getattr(lm, args.method)))
-    #     sent = input()
+    sent = input()
+    while sent:
+        print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
+        print(lm.perplexity(sent, getattr(lm, args.method)))
+        sent = input()
