@@ -1,6 +1,15 @@
 Language Models
 =
 
+# Resources that helps me to understand Kneser-Ney Smoothing
+* [speech and languge processing book](https://web.stanford.edu/~jurafsky/slp3/)
+* [this lecture from the course](https://www.youtube.com/watch?v=4wa2WyDrgMA)
+* [lecture form India](https://www.youtube.com/watch?v=NiKGlBb3NTE&list=PLJJzI13YAXCHxbVgiFaSI88hj-mRSoMtI&index=14)
+* [this paper review of smoothing techniques in Ngram language Models](http://www.cs.berkeley.edu/~klein/cs294-5/chen_goodman.pdf)
+
+
+Languge Models
+=
 As always, check out the Github repository with the course homework templates:
 
 http://github.com/ezubaric/cl1-hw.git
@@ -75,7 +84,8 @@ A: No, that's not part of this assignment.
 
 
 Top 10 lowwer preplexityies -higer probabilities- with laplace smoothing: (most of them of unkown token)
------------------
+----
+```
 (1) 3.6683662567610402   -> IRAs .
 <s>#UNK#.#</s>
 -----
@@ -105,4 +115,4 @@ Top 10 lowwer preplexityies -higer probabilities- with laplace smoothing: (most 
 -----
 (10) 11.519723041766555   -> He is his own man .
 <s>#he#is#his#own#man#.#</s>
-
+```
