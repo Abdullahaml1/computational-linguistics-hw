@@ -71,3 +71,38 @@ A: Return kNEG\_INF instead.
 *Q: Do I tune the hyperparameters for interpolation, discount, etc.?*
 
 A: No, that's not part of this assignment.
+
+
+
+Top 10 lowwer preplexityies -higer probabilities- with laplace smoothing: (most of them of unkown token)
+-----------------
+(1) 3.6683662567610402   -> IRAs .
+<s>#UNK#.#</s>
+-----
+(2) 4.325582590645588   -> It was outrageous .
+<s>#it#was#UNK#.#</s>
+-----
+(3) 6.620080041752021   -> The '82 Salon is $ 115 *U* .
+<s>#the#UNK#UNK#is#$#UNK#UNK#.#</s>
+-----
+(4) 8.783914718624546   -> They mature 1992-1999 , 2009 and 2017 .
+<s>#they#mature#UNK#,#UNK#and#UNK#.#</s>
+-----
+(5) 9.038148201313476   -> They mature in 2005 , 2009 and 2029 .
+<s>#they#mature#in#UNK#,#UNK#and#UNK#.#</s>
+-----
+(6) 9.732751233562453   -> Test-preparation booklets , software and worksheets are a booming publishing subindustry .
+<s>#UNK#UNK#,#UNK#and#UNK#are#a#UNK#publishing#UNK#.#</s>
+-----
+(7) 10.014733529523305   -> Marie-Louise , a small-time abortionist , was their woman .
+<s>#UNK#,#a#UNK#UNK#,#was#their#woman#.#</s>
+-----
+(8) 10.298798507579201   -> I believe in the system .
+<s>#i#believe#in#the#system#.#</s>
+-----
+(9) 10.630311815783879   -> That was the law .
+<s>#that#was#the#law#.#</s>
+-----
+(10) 11.519723041766555   -> He is his own man .
+<s>#he#is#his#own#man#.#</s>
+

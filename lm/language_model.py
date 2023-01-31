@@ -1,4 +1,4 @@
-from math import log, exp
+from math import log, exp, sqrt
 from collections import defaultdict
 import argparse
 
@@ -262,8 +262,8 @@ class BigramLanguageModel:
 
         You do not need to modify this code.
         """
-        return 2.0 ** (-1.0 * mean([method(context, word) for context, word in \
-                                    bigrams(self.tokenize_and_censor(sentence))]))
+        return sqrt(2.0 ** (-1.0 * mean([method(context, word) for context, word in \
+                                    bigrams(self.tokenize_and_censor(sentence))])))
 
     def sample(self, method, samples=25):
         """
@@ -274,10 +274,40 @@ class BigramLanguageModel:
         # Modify this code to get extra credit.  This should be
         # written as an iterator.  I.e. yield @samples times followed
         # by a final return, as in the sample code.
+        pass
 
-        for ii in xrange(samples):
-            yield ""
-        return
+        # for ii in range(samples):
+        #     yield ""
+        # return
+
+    def tokenize_and_get_last_word(self, sent):
+        """
+        tokenize the sentence and return the last token
+        """
+        if sent == '':
+            return self.vocab_lookup(kSTART)
+
+        return self.vocab_lookup(self._tokenizer(sent)[-1])
+
+
+
+    def predict_word(self, sent, method):
+
+        context = self.tokenize_and_get_last_word(sent)
+        last_word = ""
+        max_prob = kNEG_INF
+
+        for word in self._unigram_dict:
+
+            prob = method(context, word)
+            if (prob > max_prob) and (word != self._unk_token):
+                last_word = word
+                max_prob = prob
+
+        return last_word
+
+
+
 
 # You do not need to modify the below code, but you may want to during
 # your "exploration" of high / low probability sentences.
@@ -346,8 +376,67 @@ if __name__ == "__main__":
                            'jelinek_mercer', 'good_turing', 'laplace'], \
       "Invalid estimation method"
 
+    # sent = input()
+    # while sent:
+    #     print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
+    #     print(lm.perplexity(sent, getattr(lm, args.method)))
+    #     sent = input()
+
+
+
+    # """ 
+    # Testing Treebank data set (getting the 10 most probable words)
+    # i.e: (the 10 lowest preplexities)
+    # """
+    # print("Testing Treebank Corpus ........")
+    # top_k = 10
+    # top_k_list = [] # [(preplixty, index_in_corpus)]
+
+    # sent_count = 0
+    # for i in range(len(nltk.corpus.treebank.sents())):
+    # # for i in range(500):
+    #     sent_count +=1
+    #     print('sent count: ', sent_count) 
+    #     sent = " ".join(nltk.corpus.treebank.sents()[i])
+    #     prep = lm.perplexity(sent, getattr(lm, args.method))
+
+
+    #     if len(top_k_list) == 0:
+    #         top_k_list.append((prep, i))
+
+    #     elif (len(top_k_list) == top_k) and (prep < top_k_list[-1][0]):
+    #         top_k_list.pop(-1) # removes the highest preplexity
+    #         top_k_list.append((prep, i))
+    #         top_k_list.sort()
+
+    #     elif len(top_k_list) < top_k:
+    #         top_k_list.append((prep, i))
+    #         top_k_list.sort()
+
+
+    # count = 0
+    # for prep, i in top_k_list:
+    #     count +=1
+    #     sent = " ".join(nltk.corpus.treebank.sents()[i])
+    #     print(f'({count})', prep, "  ->", sent)
+    #     print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
+    #     print('-----')
+
+
+
     sent = input()
-    while sent:
-        print("#".join(str(x) for x in lm.tokenize_and_censor(sent)))
-        print(lm.perplexity(sent, getattr(lm, args.method)))
+    predicted_sent = sent
+    while 1:
+        word = lm.predict_word(predicted_sent, getattr(lm, args.method))
+        predicted_sent += f' {word}'
+        print(predicted_sent)
+        print("#".join(str(x) for x in lm.tokenize_and_censor(predicted_sent)))
+        print(lm.perplexity(predicted_sent, getattr(lm, args.method)))
+        print('type "n22" to insert new sentences, or cotinue predicting')
+        print('---------------------')
         sent = input()
+        if (sent == 'n22'):
+            predicted_sent = input()
+        elif sent != '':
+            predicted_sent += f' {sent}'
+
