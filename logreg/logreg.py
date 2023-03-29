@@ -39,11 +39,9 @@ class Example:
         self.nonzero = {vocab.index(kBIAS): 1}
         self.y = label
         self.x = np.zeros(len(vocab))
-        self.word_types_count =0 # number of words types in each example
         for word, count in [x.split(":") for x in words]:
             if word in vocab:
                 assert word != kBIAS, "Bias can't actually appear in document"
-                self.word_types_count +=1
                 self.x[vocab.index(word)] += float(count)
                 self.nonzero[vocab.index(word)] = word
         self.x[0] = 1 # the bias
