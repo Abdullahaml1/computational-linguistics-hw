@@ -1,3 +1,5 @@
+# ipython 
+**/.ipynb_checkpoints/
 *.py[cod]
 
 # C extensions

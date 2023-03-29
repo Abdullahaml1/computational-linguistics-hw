@@ -39,12 +39,14 @@ class Example:
         self.nonzero = {vocab.index(kBIAS): 1}
         self.y = label
         self.x = np.zeros(len(vocab))
+        self.word_types_count =0 # number of words types in each example
         for word, count in [x.split(":") for x in words]:
             if word in vocab:
                 assert word != kBIAS, "Bias can't actually appear in document"
+                self.word_types_count +=1
                 self.x[vocab.index(word)] += float(count)
                 self.nonzero[vocab.index(word)] = word
-        self.x[0] = 1
+        self.x[0] = 1 # the bias
 
 
 class LogReg:
@@ -53,16 +55,24 @@ class LogReg:
         Create a logistic regression classifier
         :param num_features: The number of features (including bias)
         :param mu: Regularization parameter (for extra credit)
-        :param step: A function that takes the iteration as an argument (the default is a constant value)
+        :param step: A function that takes the iteration as an argument (the default is a constant value) -> (learing rate)
         """
 
         self.dimension = num_features
         self.beta = np.zeros(num_features)
         self.mu = mu
-        self.step = step
+        self.step = step # learning rate
         self.last_update = np.zeros(num_features)
 
         assert self.mu >= 0, "Regularization parameter must be non-negative"
+
+    def forward(self, example):
+        """
+        returns the forward probability for a SINGLE example
+        :param example: object of type Example
+        :return: the probabiltiy
+        """
+        return sigmoid(np.dot(self.beta, example.x))
 
     def progress(self, examples):
         """
@@ -74,7 +84,7 @@ class LogReg:
         logprob = 0.0
         num_right = 0
         for ii in examples:
-            p = sigmoid(self.beta.dot(ii.x))
+            p = self.forward(ii)
             if ii.y == 1:
                 logprob += log(p)
             else:
@@ -98,6 +108,8 @@ class LogReg:
         :param use_tfidf: A boolean to switch between the raw data and the tfidf representation
         :return: Return the new value of the regression coefficients
         """
+        # self.beta
+        # self.step
 
         return self.beta
 
@@ -118,8 +130,8 @@ def read_dataset(positive, negative, vocab, test_proportion=.1):
     :param vocab: A list of vocabulary words
     :param test_proprotion: How much of the data should be reserved for test
     """
-    df = [float(x.split("\t")[1]) for x in open(vocab, 'r') if '\t' in x]
-    vocab = [x.split("\t")[0] for x in open(vocab, 'r') if '\t' in x]
+    df = [float(x.split("\t")[1]) for x in open(vocab, 'r') if '\t' in x] # count of words in the vocab
+    vocab = [x.split("\t")[0] for x in open(vocab, 'r') if '\t' in x] # list of words in vocab
     assert vocab[0] == kBIAS, \
         "First vocab word must be bias term (was %s)" % vocab[0]
 
@@ -143,7 +155,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--mu", help="Weight of L2 regression",
                            type=float, default=0.0, required=False)
-    argparser.add_argument("--step", help="Initial SG step size",
+    argparser.add_argument("--step", help="Initial SG step size (learning rate)",
                            type=float, default=0.1, required=False)
     argparser.add_argument("--positive", help="Positive class",
                            type=str, default="data/positive", required=False)
@@ -168,6 +180,9 @@ if __name__ == "__main__":
         # Modify this code if you do learning rate extra credit
         raise NotImplementedError
 
+    """
+    MAIN LOOP
+    """
     # Iterations
     update_number = 0
     for pp in range(args.passes):
@@ -183,7 +198,7 @@ if __name__ == "__main__":
 
             if update_number % 5 == 1:
                 train_lp, train_acc = lr.progress(train)
-                ho_lp, ho_acc = lr.progress(test)
+                ho_lp, ho_acc = lr.progress(test) # h for hypotheses
                 print("Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
                       (update_number, train_lp, ho_lp, train_acc, ho_acc))
 
