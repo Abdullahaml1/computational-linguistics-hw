@@ -9,6 +9,8 @@ import argparse
 kSEED = 1701
 kBIAS = "BIAS_CONSTANT"
 
+SMALL_NUMBER = 1e-8
+
 random.seed(kSEED)
 
 
@@ -23,6 +25,42 @@ def sigmoid(score, threshold=20.0):
 
     activation = exp(score)
     return activation / (1.0 + activation)
+
+def sigmoid_derivative(sig_output):
+    """
+    ;param sig_output: the output of sigmoid function
+    :return: the dervative of sigmoid
+    """
+    return sig_output * (1-sig_output)
+
+def log2(x):
+    """
+    :return: log with base 2
+    """
+    return np.log(x+SMALL_NUMBER)/np.log(2)
+
+def cross_entropy_loss(p, y):
+    """
+    :param p: predicte value
+    :param y: true value
+    :return: corssEntropy loss
+    """
+    if (y==1):
+        return -log2(p)
+    else:
+        return -log2(1-p)
+
+
+def cross_entropy_loss_derivative(p, y):
+    """
+    :param p: predicte value
+    :param y: true value
+    :return: corssEntropy loss dervative
+    """
+    if (y==1):
+        return -1/(p + SMALL_NUMBER) - log2(p)
+    else:
+        return -1/(1- p + SMALL_NUMBER) - log2(1-p)
 
 
 class Example:
@@ -57,7 +95,7 @@ class LogReg:
         """
 
         self.dimension = num_features
-        self.beta = np.zeros(num_features)
+        self.beta = np.random.randn(num_features) # weights
         self.mu = mu
         self.step = step # learning rate
         self.last_update = np.zeros(num_features)
@@ -106,8 +144,14 @@ class LogReg:
         :param use_tfidf: A boolean to switch between the raw data and the tfidf representation
         :return: Return the new value of the regression coefficients
         """
-        # self.beta
-        # self.step
+        p = self.forward(train_example)
+
+        loss_deriv = cross_entropy_loss_derivative(p, train_example.y)
+        sig_deriv = sigmoid_derivative(p)
+
+        grad = loss_deriv * sig_deriv * train_example.x
+
+        self.beta -= self.step(1) * grad # self.step is a lamabda function
 
         return self.beta
 
@@ -117,6 +161,7 @@ class LogReg:
         all variables that need it.
         Only implement this function if you do the extra credit.
         """
+
 
         return self.beta
 
@@ -165,6 +210,8 @@ if __name__ == "__main__":
                            type=int, default=1, required=False)
     argparser.add_argument("--ec", help="Extra credit option (df, lazy, or rate)",
                            type=str, default="")
+    argparser.add_argument("--log", help="display statics or not",
+                           type=str, default='True')
 
     args = argparser.parse_args()
     train, test, vocab = read_dataset(args.positive, args.negative, args.vocab)
@@ -182,8 +229,9 @@ if __name__ == "__main__":
     MAIN LOOP
     """
     # Iterations
-    update_number = 0
     for pp in range(args.passes):
+        print(f'Epoch:{pp+1}')
+        update_number = 0
         for ii in train:
             update_number += 1
             # Do we use extra credit option
@@ -194,11 +242,12 @@ if __name__ == "__main__":
             else:
                 lr.sg_update(ii, update_number)
 
-            if update_number % 5 == 1:
+            if update_number % 30 == 1:
                 train_lp, train_acc = lr.progress(train)
                 ho_lp, ho_acc = lr.progress(test) # h for hypotheses
-                print("Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
-                      (update_number, train_lp, ho_lp, train_acc, ho_acc))
+                if args.log == 'True':
+                    print("    Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
+                        (update_number, train_lp, ho_lp, train_acc, ho_acc))
 
     # Final update with empty example
     lr.finalize_lazy(update_number)
