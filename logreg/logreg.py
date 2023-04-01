@@ -3,6 +3,8 @@ import random
 import numpy as np
 from math import exp, log
 from collections import defaultdict
+import matplotlib.pyplot as plt
+import matplotlib_inline
 
 import argparse
 
@@ -203,6 +205,27 @@ def read_dataset(positive, negative, vocab, test_proportion=.1):
 
     return train, test, vocab
 
+''' ploting function '''
+def plot_test_val(ax, title, train, test, test_point):
+    '''
+    plots a given train and test data
+    :param ax: matplotlib ax
+    :param title: str
+    :param train: train list
+    :param test: test list
+    :param test_point: number
+    '''
+    x = np.arange(1, len(test) +1, 1)
+    ax.plot(x, train, label='train', color='r')
+    ax.plot(x, test, label='test', color='b')
+    ax.plot([len(test)], [test_point], 'g*')
+    ax.annotate(f"test {title}={test_point:.3f}", xy=(len(test), test_point), xytext=(len(test)-1, test_point-.05))
+    ax.set_xlabel('Epochs')
+    ax.legend()
+    ax.set_title(title)
+    ax.grid()
+
+    
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--mu", help="Weight of L2 regression",
@@ -242,6 +265,11 @@ if __name__ == "__main__":
     MAIN LOOP
     """
     # Iterations
+    train_loss_list = []
+    test_loss_list =[]
+
+    train_acc_list=[]
+    test_acc_list=[]
     _, _,last_test_loss = lr.progress(test)
     for pp in range(args.passes):
         print(f'Epoch:{pp+1}')
@@ -263,6 +291,12 @@ if __name__ == "__main__":
                     print("    Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
                         (update_number, train_lp, ho_lp, train_acc, ho_acc))
         
+        '''recording losses for ploting'''
+        train_loss_list.append(train_loss)
+        test_loss_list.append(test_loss)
+        train_acc_list.append(train_acc)
+        test_acc_list.append(ho_acc)
+
         """ Early Stoping"""
         if args.early_stop=='yes':
             if test_loss > last_test_loss:
@@ -270,7 +304,7 @@ if __name__ == "__main__":
                 break
             last_test_loss = test_loss
 
-        # displaying loss
+        ''' displaying loss'''
         print(f"Train logP={train_lp:f} Test logP={ho_lp:f} Train Acc={train_acc:f} Test Acc={ho_acc:f} " +
                 f'TrainLoss={train_loss:f} TestLoss={test_loss:f}')
         print('----------------------------')
@@ -279,3 +313,11 @@ if __name__ == "__main__":
     lr.finalize_lazy(update_number)
     print(f"Train logP={train_lp:f} Test logP={ho_lp:f} Train Acc={train_acc:f} Test Acc={ho_acc:f} " +
             f'TrainLoss={train_loss:f} TestLoss={test_loss:f}')
+
+
+    '''ploting results'''
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+    plot_test_val(ax1, 'Loss', train_loss_list, test_loss_list, test_loss)
+    plot_test_val(ax2, 'Accuracy', train_acc_list, test_acc_list, ho_acc)
+    plt.show()
+
