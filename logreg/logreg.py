@@ -6,11 +6,13 @@ from collections import defaultdict
 
 import argparse
 
+SEED = 42
 kSEED = 1701
 kBIAS = "BIAS_CONSTANT"
 
 SMALL_NUMBER = 1e-8
 
+np.random.seed(SEED)
 random.seed(kSEED)
 
 
@@ -60,7 +62,7 @@ def cross_entropy_loss_derivative(p, y):
     if (y==1):
         return -1/(p + SMALL_NUMBER) - log2(p)
     else:
-        return -1/(1- p + SMALL_NUMBER) - log2(1-p)
+        return 1/(1- p + SMALL_NUMBER) + log2(1-p)
 
 
 class Example:
@@ -86,7 +88,9 @@ class Example:
 
 
 class LogReg:
-    def __init__(self, num_features, mu, step):
+    def __init__(self, num_features, mu, step,
+            loss_func=cross_entropy_loss,
+            loss_deriv_func=cross_entropy_loss_derivative):
         """
         Create a logistic regression classifier
         :param num_features: The number of features (including bias)
@@ -99,6 +103,9 @@ class LogReg:
         self.mu = mu
         self.step = step # learning rate
         self.last_update = np.zeros(num_features)
+        self.loss_func = loss_func
+        self.loss_deriv_func = loss_deriv_func
+        self.loss = 0.0 # accumalate loss
 
         assert self.mu >= 0, "Regularization parameter must be non-negative"
 
@@ -114,13 +121,15 @@ class LogReg:
         """
         Given a set of examples, compute the probability and accuracy
         :param examples: The dataset to score
-        :return: A tuple of (log probability, accuracy)
+        :return: A tuple of (log probability, accuracy, loss)
         """
 
         logprob = 0.0
         num_right = 0
+        loss = 0.0
         for ii in examples:
             p = self.forward(ii)
+            loss += self.loss_func(p, ii.y)
             if ii.y == 1:
                 logprob += log(p)
             else:
@@ -133,7 +142,7 @@ class LogReg:
             if abs(ii.y - p) < 0.5:
                 num_right += 1
 
-        return logprob, float(num_right) / float(len(examples))
+        return logprob, float(num_right) / float(len(examples)), float(loss/len(examples))
 
     def sg_update(self, train_example, iteration,
                   lazy=False, use_tfidf=False):
@@ -146,7 +155,7 @@ class LogReg:
         """
         p = self.forward(train_example)
 
-        loss_deriv = cross_entropy_loss_derivative(p, train_example.y)
+        loss_deriv = self.loss_deriv_func(p, train_example.y)
         sig_deriv = sigmoid_derivative(p)
 
         grad = loss_deriv * sig_deriv * train_example.x
@@ -210,8 +219,12 @@ if __name__ == "__main__":
                            type=int, default=1, required=False)
     argparser.add_argument("--ec", help="Extra credit option (df, lazy, or rate)",
                            type=str, default="")
-    argparser.add_argument("--log", help="display statics or not",
-                           type=str, default='True')
+    argparser.add_argument("--early_stop", help="Early stop of test loss increased | {yes|no}",
+                           type=str, default='no')
+    argparser.add_argument("--log", help="display statics or not | {yes:no}",
+                           type=str, default='yes')
+    argparser.add_argument("--log_step", help="rate to print single epoch log",
+                           type=int, default=100)
 
     args = argparser.parse_args()
     train, test, vocab = read_dataset(args.positive, args.negative, args.vocab)
@@ -229,6 +242,7 @@ if __name__ == "__main__":
     MAIN LOOP
     """
     # Iterations
+    _, _,last_test_loss = lr.progress(test)
     for pp in range(args.passes):
         print(f'Epoch:{pp+1}')
         update_number = 0
@@ -242,14 +256,26 @@ if __name__ == "__main__":
             else:
                 lr.sg_update(ii, update_number)
 
-            if update_number % 30 == 1:
-                train_lp, train_acc = lr.progress(train)
-                ho_lp, ho_acc = lr.progress(test) # h for hypotheses
-                if args.log == 'True':
+            if update_number % args.log_step == 1:
+                train_lp, train_acc, train_loss = lr.progress(train)
+                ho_lp, ho_acc, test_loss = lr.progress(test) # h for hypotheses
+                if args.log=='yes' :
                     print("    Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
                         (update_number, train_lp, ho_lp, train_acc, ho_acc))
+        
+        """ Early Stoping"""
+        if args.early_stop=='yes':
+            if test_loss > last_test_loss:
+                print('Early Stop')
+                break
+            last_test_loss = test_loss
+
+        # displaying loss
+        print(f"Train logP={train_lp:f} Test logP={ho_lp:f} Train Acc={train_acc:f} Test Acc={ho_acc:f} " +
+                f'TrainLoss={train_loss:f} TestLoss={test_loss:f}')
+        print('----------------------------')
 
     # Final update with empty example
     lr.finalize_lazy(update_number)
-    print("Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
-          (update_number, train_lp, ho_lp, train_acc, ho_acc))
+    print(f"Train logP={train_lp:f} Test logP={ho_lp:f} Train Acc={train_acc:f} Test Acc={ho_acc:f} " +
+            f'TrainLoss={train_loss:f} TestLoss={test_loss:f}')
