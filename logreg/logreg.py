@@ -250,6 +250,8 @@ if __name__ == "__main__":
                            type=str, default='yes')
     argparser.add_argument("--log_step", help="rate to print single epoch log",
                            type=int, default=100)
+    argparser.add_argument("--plot_name", help="plot name",
+                           type=str, default='plot')
 
     args = argparser.parse_args()
     train, test, vocab = read_dataset(args.positive, args.negative, args.vocab)
@@ -322,4 +324,5 @@ if __name__ == "__main__":
     plot_test_val(ax1, 'Loss', train_loss_list, test_loss_list, test_loss)
     plot_test_val(ax2, 'Accuracy', train_acc_list, test_acc_list, ho_acc)
     plt.show()
+    fig.savefig(f'figures/{args.plot_name}.png')
 
