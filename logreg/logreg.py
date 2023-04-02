@@ -90,6 +90,84 @@ class Example:
                 self.nonzero[vocab.index(word)] = word
         self.x[0] = 1 # the bias
 
+class ExamplesDataset:
+    '''
+    class to represent dataset (pool of Example objects)
+    '''
+    def __init__(self, positive, negative, vocab, test_proportion=.1):
+        """
+        :param positive: Positive examples file
+        :param negative: Negative examples file
+        :param vocab: A list of vocabulary words file
+        :param test_proprotion: How much of the data should be reserved for test (int)
+        """
+        self.train_examples_list =[]
+        self.test_examples_list =[]
+        self.vocab_list =[]
+
+        self.train_features_arr = np.empty(shape=(100,1000)) 
+        self.test_features_arr = np.empty(shape=(100,1000)) 
+
+        self.read_dataset(positive, negative, vocab, test_proportion=.1)
+
+
+    def read_dataset(self, positive, negative, vocab, test_proportion=.1):
+        """
+        Reads in a text dataset with a given vocabulary
+        :param positive: Positive examples
+        :param negative: Negative examples
+        :param vocab: A list of vocabulary words
+        :param test_proprotion: How much of the data should be reserved for test
+        """
+        df = [float(x.split("\t")[1]) for x in open(vocab, 'r') if '\t' in x] # count of words in the vocab
+        vocab = [x.split("\t")[0] for x in open(vocab, 'r') if '\t' in x] # list of words in vocab
+        assert vocab[0] == kBIAS, \
+            "First vocab word must be bias term (was %s)" % vocab[0]
+    
+        train = []
+        test = []
+        for label, input in [(1, positive), (0, negative)]:
+            for line in open(input):
+                ex = Example(label, line.split(), vocab, df)
+                if random.random() <= test_proportion:
+                    test.append(ex)
+                else:
+                    train.append(ex)
+    
+        # Shuffle the data so that we don't have order effects
+        random.shuffle(train)
+        random.shuffle(test)
+
+        self.train_examples_list = train
+        self.test_examples_list = test
+        self.vocab_list = vocab
+
+        # converting to arrays
+        self.train_features_arr = np.empty(shape=(len(train), len(vocab)))
+        for i in range(len(train)):
+            self.train_features_arr[i] = train[i].x
+            
+        self.test_features_arr = np.empty(shape=(len(test), len(vocab)))
+        for i in range(len(test)):
+            self.test_features_arr[i] = test[i].x
+
+
+
+    def get_examples(self):
+        '''
+        get examples of the dataset
+        :return: a tuple of (train, test, vocab)
+        train: list of Example object
+        test: list of Example object
+        vocab: list of words
+        '''
+
+        return (self.train_examples_list, 
+                self.test_examples_list,
+                self.vocab_list)
+
+
+
 
 class LogReg:
     def __init__(self, num_features, mu, step,
@@ -178,34 +256,6 @@ class LogReg:
 
         return self.beta
 
-def read_dataset(positive, negative, vocab, test_proportion=.1):
-    """
-    Reads in a text dataset with a given vocabulary
-    :param positive: Positive examples
-    :param negative: Negative examples
-    :param vocab: A list of vocabulary words
-    :param test_proprotion: How much of the data should be reserved for test
-    """
-    df = [float(x.split("\t")[1]) for x in open(vocab, 'r') if '\t' in x] # count of words in the vocab
-    vocab = [x.split("\t")[0] for x in open(vocab, 'r') if '\t' in x] # list of words in vocab
-    assert vocab[0] == kBIAS, \
-        "First vocab word must be bias term (was %s)" % vocab[0]
-
-    train = []
-    test = []
-    for label, input in [(1, positive), (0, negative)]:
-        for line in open(input):
-            ex = Example(label, line.split(), vocab, df)
-            if random.random() <= test_proportion:
-                test.append(ex)
-            else:
-                train.append(ex)
-
-    # Shuffle the data so that we don't have order effects
-    random.shuffle(train)
-    random.shuffle(test)
-
-    return train, test, vocab
 
 ''' ploting function '''
 def plot_test_val(ax, title, train, test, test_point):
@@ -254,8 +304,10 @@ if __name__ == "__main__":
                            type=str, default='plot')
 
     args = argparser.parse_args()
-    train, test, vocab = read_dataset(args.positive, args.negative, args.vocab)
 
+    '''Reading dataset'''
+    dataset = ExamplesDataset(args.positive, args.negative, args.vocab)
+    train, test, vocab = dataset.get_examples()
     print("Read in %i train and %i test" % (len(train), len(test)))
 
     # Initialize model
