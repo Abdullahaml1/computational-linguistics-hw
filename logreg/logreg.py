@@ -61,10 +61,12 @@ def cross_entropy_loss_derivative(p, y):
     :param y: true value
     :return: corssEntropy loss dervative
     """
-    if (y==1):
-        return -1/(p + SMALL_NUMBER) - log2(p)
-    else:
-        return 1/(1- p + SMALL_NUMBER) + log2(1-p)
+    return -y/(p + SMALL_NUMBER) - log2(p) + \
+        (1-y)/(1- p + SMALL_NUMBER) + log2(1-p)
+    # if (y==1):
+    #     return -1/(p + SMALL_NUMBER) - log2(p)
+    # else:
+    #     return 1/(1- p + SMALL_NUMBER) + log2(1-p)
 
 
 class Example:
