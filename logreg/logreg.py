@@ -90,6 +90,9 @@ class Example:
                 self.nonzero[vocab.index(word)] = word
         self.x[0] = 1 # the bias
 
+
+
+
 class ExamplesDataset:
     '''
     class to represent dataset (pool of Example objects)
@@ -105,10 +108,14 @@ class ExamplesDataset:
         self.test_examples_list =[]
         self.vocab_list =[]
 
-        # shaes are not fake (just to tell you the are numby arrays
+        # shapes are not fake (just to tell you the are numby arrays
         self.train_features_arr = np.empty(shape=(100,1000)) 
         self.test_features_arr = np.empty(shape=(100,1000)) 
 
+        # a dict with {1:'positive list', 0'negative list'}
+        self.examples_dict = {1:[], 0:[]}
+
+        # reeagin dataset
         self.read_dataset(positive, negative, vocab, test_proportion=.1)
 
 
@@ -130,6 +137,7 @@ class ExamplesDataset:
         for label, input in [(1, positive), (0, negative)]:
             for line in open(input):
                 ex = Example(label, line.split(), vocab, df)
+                self.examples_dict[label].append(ex)
                 if random.random() <= test_proportion:
                     test.append(ex)
                 else:
@@ -187,6 +195,16 @@ class ExamplesDataset:
 
         return (self.train_examples_list, 
                 self.test_examples_list,
+                self.vocab_list)
+
+    def get_positive_negative_examples(self):
+        '''
+        :return: a tuple (positive_list,
+                        negative_list,
+                        voab list of words)
+        '''
+        return (self.examples_dict[1],
+                self.examples_dict[0],
                 self.vocab_list)
 
 
