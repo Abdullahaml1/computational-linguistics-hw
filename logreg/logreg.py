@@ -105,6 +105,7 @@ class ExamplesDataset:
         self.test_examples_list =[]
         self.vocab_list =[]
 
+        # shaes are not fake (just to tell you the are numby arrays
         self.train_features_arr = np.empty(shape=(100,1000)) 
         self.test_features_arr = np.empty(shape=(100,1000)) 
 
@@ -150,6 +151,28 @@ class ExamplesDataset:
         self.test_features_arr = np.empty(shape=(len(test), len(vocab)))
         for i in range(len(test)):
             self.test_features_arr[i] = test[i].x
+
+    def normalize(self):
+        """
+        normalizing the dataset 
+        """
+        mean = np.mean(self.train_features_arr, axis=0)
+        std = np.std(self.train_features_arr, axis=0)
+        std[std < SMALL_NUMBER] = 1 # avoiding devide by zero errory
+        self.train_features_arr -= mean
+        self.train_features_arr /= std
+
+        mean = np.mean(self.test_features_arr, axis=0)
+        std = np.std(self.test_features_arr, axis=0)
+        std[std < SMALL_NUMBER] = 1 # avoiding devide by zero errory
+        self.test_features_arr -= mean
+        self.test_features_arr /= std
+
+        for i in range(len(self.train_features_arr)):
+            self.train_examples_list[i].x = self.train_features_arr[i]
+
+        for i in range(len(self.test_features_arr)):
+            self.test_examples_list[i].x = self.test_features_arr[i]
 
 
 
@@ -296,6 +319,8 @@ if __name__ == "__main__":
                            type=str, default="")
     argparser.add_argument("--early_stop", help="Early stop of test loss increased | {yes|no}",
                            type=str, default='no')
+    argparser.add_argument("--normalize", help="normalize the dataset | {yes|no}",
+                           type=str, default='no')
     argparser.add_argument("--log", help="display statics or not | {yes:no}",
                            type=str, default='yes')
     argparser.add_argument("--log_step", help="rate to print single epoch log",
@@ -307,6 +332,8 @@ if __name__ == "__main__":
 
     '''Reading dataset'''
     dataset = ExamplesDataset(args.positive, args.negative, args.vocab)
+    if args.normalize=='yes':
+        dataset.normalize()
     train, test, vocab = dataset.get_examples()
     print("Read in %i train and %i test" % (len(train), len(test)))
 
