@@ -293,9 +293,14 @@ class LogReg:
         all variables that need it.
         Only implement this function if you do the extra credit.
         """
-
-
         return self.beta
+
+    def save_weights(self, name):
+        '''
+        saving weiths to file name
+        :param name: path to save weighs to
+        '''
+        np.save(name, self.beta)
 
 
 ''' ploting function '''
@@ -345,6 +350,8 @@ if __name__ == "__main__":
                            type=int, default=100)
     argparser.add_argument("--plot_name", help="plot name",
                            type=str, default='plot')
+    argparser.add_argument("--save_weights_path", help="file path to save weiths to ex: weights/test_trial",
+                           type=str, default='')
 
     args = argparser.parse_args()
 
@@ -415,6 +422,9 @@ if __name__ == "__main__":
     print(f"Train logP={train_lp:f} Test logP={ho_lp:f} Train Acc={train_acc:f} Test Acc={ho_acc:f} " +
             f'TrainLoss={train_loss:f} TestLoss={test_loss:f}')
 
+    '''saving weights'''
+    if args.save_weights_path!='':
+        lr.save_weights(args.save_weights_path)
 
     '''ploting results'''
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
