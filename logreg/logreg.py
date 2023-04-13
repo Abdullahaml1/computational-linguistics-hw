@@ -73,12 +73,16 @@ class Example:
     """
     Class to represent a logistic regression example
     """
-    def __init__(self, label, words, vocab, df):
+    def __init__(self, label, words, vocab, df,
+            chosen_indcies=np.empty(0)):
         """
         Create a new example
         :param label: The label (0 / 1) of the example
         :param words: The words in a list of "word:count" format
         :param vocab: The vocabulary to use as features (list)
+        :param df: counts of words in vocab (list)
+        :param chosen_indcies: chosesn words indcies
+            from vocab (numpy array)
         """
         self.nonzero = {vocab.index(kBIAS): 1}
         self.y = label
@@ -88,6 +92,10 @@ class Example:
                 assert word != kBIAS, "Bias can't actually appear in document"
                 self.x[vocab.index(word)] += float(count)
                 self.nonzero[vocab.index(word)] = word
+
+        # applyiing filter
+        if len(chosen_indcies)!=0 :
+            self.x = self.x[chosen_indcies]
         self.x[0] = 1 # the bias
 
 
@@ -97,12 +105,16 @@ class ExamplesDataset:
     '''
     class to represent dataset (pool of Example objects)
     '''
-    def __init__(self, positive, negative, vocab, test_proportion=.1):
+    def __init__(self, positive, negative, vocab,
+            test_proportion=.1,
+            chosen_indcies=np.empty(0)):
         """
         :param positive: Positive examples file
         :param negative: Negative examples file
         :param vocab: A list of vocabulary words file
         :param test_proprotion: How much of the data should be reserved for test (int)
+        :param chosen_indcies: chosesn words indcies
+            from vocab (numpy array)
         """
         self.train_examples_list =[]
         self.test_examples_list =[]
@@ -116,16 +128,22 @@ class ExamplesDataset:
         self.examples_dict = {1:[], 0:[]}
 
         # reeagin dataset
-        self.read_dataset(positive, negative, vocab, test_proportion=.1)
+        self.read_dataset(positive, negative, vocab,
+                test_proportion=.1,
+                chosen_indcies=chosen_indcies)
 
 
-    def read_dataset(self, positive, negative, vocab, test_proportion=.1):
+    def read_dataset(self, positive, negative, vocab,
+            test_proportion=.1,
+            chosen_indcies=np.empty(0)):
         """
         Reads in a text dataset with a given vocabulary
         :param positive: Positive examples
         :param negative: Negative examples
         :param vocab: A list of vocabulary words
         :param test_proprotion: How much of the data should be reserved for test
+        :param chosen_indcies: chosesn words indcies
+            from vocab (numpy array)
         """
         df = [float(x.split("\t")[1]) for x in open(vocab, 'r') if '\t' in x] # count of words in the vocab
         vocab = [x.split("\t")[0] for x in open(vocab, 'r') if '\t' in x] # list of words in vocab
@@ -136,7 +154,8 @@ class ExamplesDataset:
         test = []
         for label, input in [(1, positive), (0, negative)]:
             for line in open(input):
-                ex = Example(label, line.split(), vocab, df)
+                ex = Example(label, line.split(), vocab, df,
+                        chosen_indcies)
                 self.examples_dict[label].append(ex)
                 if random.random() <= test_proportion:
                     test.append(ex)
@@ -152,11 +171,16 @@ class ExamplesDataset:
         self.vocab_list = vocab
 
         # converting to arrays
-        self.train_features_arr = np.empty(shape=(len(train), len(vocab)))
+        if len(chosen_indcies) != 0:
+            self.train_features_arr = np.empty(shape=(len(train), len(chosen_indcies)))
+            self.test_features_arr = np.empty(shape=(len(test), len(chosen_indcies)))
+        else:
+            self.train_features_arr = np.empty(shape=(len(train), len(vocab)))
+            self.test_features_arr = np.empty(shape=(len(test), len(vocab)))
+
         for i in range(len(train)):
             self.train_features_arr[i] = train[i].x
             
-        self.test_features_arr = np.empty(shape=(len(test), len(vocab)))
         for i in range(len(test)):
             self.test_features_arr[i] = test[i].x
 
@@ -344,6 +368,10 @@ if __name__ == "__main__":
                            type=str, default='no')
     argparser.add_argument("--normalize", help="normalize the dataset | {yes|no}",
                            type=str, default='no')
+    argparser.add_argument("--chosen_positive_indcies", help="a numpy array saved as .npy file",
+                           type=str, default='')
+    argparser.add_argument("--chosen_negative_indcies", help="a numpy array saved as .npy file",
+                           type=str, default='')
     argparser.add_argument("--log", help="display statics or not | {yes:no}",
                            type=str, default='yes')
     argparser.add_argument("--log_step", help="rate to print single epoch log",
@@ -356,15 +384,35 @@ if __name__ == "__main__":
     args = argparser.parse_args()
 
     '''Reading dataset'''
-    dataset = ExamplesDataset(args.positive, args.negative, args.vocab)
+        # applying fileter (chosen words)
+    if args.chosen_positive_indcies !='' and args.chosen_negative_indcies!='':
+        chosen_p = np.load(args.chosen_positive_indcies)
+        chosen_n = np.load(args.chosen_negative_indcies)
+        chosen = np.zeros(len(chosen_p) + len(chosen_n) +1, dtype=np.int32)
+        chosen[1:len(chosen_p) +1] = chosen_p
+        chosen[len(chosen_p) +1:] = chosen_n
+        chosen[0] = 0 # to chose bias
+        print(chosen)
+        chosen = np.sort(chosen)
+        dataset = ExamplesDataset(args.positive, args.negative,
+                args.vocab, chosen_indcies=chosen)
+    else:
+        dataset = ExamplesDataset(args.positive, args.negative, args.vocab)
+
+        # normalization
     if args.normalize=='yes':
         dataset.normalize()
+
     train, test, vocab = dataset.get_examples()
     print("Read in %i train and %i test" % (len(train), len(test)))
 
-    # Initialize model
+    ''' Initialize model'''
+    num_features= len(vocab)
+    if args.chosen_positive_indcies !='' and args.chosen_negative_indcies!='':
+        num_featues = len(chosen)
+
     if args.ec != "rate":
-        lr = LogReg(len(vocab), args.mu, lambda x: args.step)
+        lr = LogReg(num_features, args.mu, lambda x: args.step)
     else:
         # Modify this code if you do learning rate extra credit
         raise NotImplementedError
