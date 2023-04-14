@@ -188,17 +188,18 @@ class ExamplesDataset:
         """
         normalizing the dataset 
         """
-        mean = np.mean(self.train_features_arr, axis=0)
-        std = np.std(self.train_features_arr, axis=0)
+        # avoidng bias by [1:]
+        mean = np.mean(self.train_features_arr[1:], axis=0)
+        std = np.std(self.train_features_arr[1:], axis=0)
         std[std < SMALL_NUMBER] = 1 # avoiding devide by zero errory
-        self.train_features_arr -= mean
-        self.train_features_arr /= std
+        self.train_features_arr[1:] -= mean
+        self.train_features_arr[1:] /= std
 
-        mean = np.mean(self.test_features_arr, axis=0)
-        std = np.std(self.test_features_arr, axis=0)
+        mean = np.mean(self.test_features_arr[1:], axis=0)
+        std = np.std(self.test_features_arr[1:], axis=0)
         std[std < SMALL_NUMBER] = 1 # avoiding devide by zero errory
-        self.test_features_arr -= mean
-        self.test_features_arr /= std
+        self.test_features_arr[1:] -= mean
+        self.test_features_arr[1:] /= std
 
         for i in range(len(self.train_features_arr)):
             self.train_examples_list[i].x = self.train_features_arr[i]
@@ -247,7 +248,6 @@ class LogReg:
 
         self.dimension = num_features
         self.beta = np.random.randn(num_features) # weights
-        print(self.beta.shape)
         self.mu = mu
         self.step = step # learning rate
         self.last_update = np.zeros(num_features)
@@ -365,8 +365,8 @@ if __name__ == "__main__":
                            type=int, default=1, required=False)
     argparser.add_argument("--ec", help="Extra credit option (df, lazy, or rate)",
                            type=str, default="")
-    argparser.add_argument("--early_stop", help="Early stop of test loss increased | {yes|no}",
-                           type=str, default='no')
+    argparser.add_argument("--early_stop", help="Early stop of test loss increased | numerical value {-1} ealry stop",
+                           type=int, default=-1)
     argparser.add_argument("--normalize", help="normalize the dataset | {yes|no}",
                            type=str, default='no')
     argparser.add_argument("--chosen_positive_indcies", help="a numpy array saved as .npy file",
@@ -394,7 +394,6 @@ if __name__ == "__main__":
         chosen[1:len(chosen_p) +1] = chosen_p
         chosen[len(chosen_p) +1:] = chosen_n
         chosen[0] = 0 # to chose bias
-        print(chosen)
         chosen = np.sort(chosen)
         dataset = ExamplesDataset(args.positive, args.negative,
                 args.vocab, chosen_indcies=chosen)
@@ -413,7 +412,6 @@ if __name__ == "__main__":
         # if no selected weights use the whole vocab
     if args.chosen_positive_indcies =='' or args.chosen_negative_indcies=='':
         num_features = len(vocab)
-    print(num_features)
 
     if args.ec != "rate":
         lr = LogReg(num_features, args.mu, lambda x: args.step)
@@ -431,6 +429,7 @@ if __name__ == "__main__":
     train_acc_list=[]
     test_acc_list=[]
     _, _,last_test_loss = lr.progress(test)
+    early_stop_count = args.early_stop
     for pp in range(args.passes):
         print(f'Epoch:{pp+1}')
         update_number = 0
@@ -458,8 +457,10 @@ if __name__ == "__main__":
         test_acc_list.append(ho_acc)
 
         """ Early Stoping"""
-        if args.early_stop=='yes':
+        if args.early_stop > 0:
             if test_loss > last_test_loss:
+                early_stop_count -= 1
+            if early_stop_count ==0:
                 print('Early Stop')
                 break
             last_test_loss = test_loss
