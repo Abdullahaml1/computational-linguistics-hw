@@ -247,6 +247,7 @@ class LogReg:
 
         self.dimension = num_features
         self.beta = np.random.randn(num_features) # weights
+        print(self.beta.shape)
         self.mu = mu
         self.step = step # learning rate
         self.last_update = np.zeros(num_features)
@@ -384,6 +385,7 @@ if __name__ == "__main__":
     args = argparser.parse_args()
 
     '''Reading dataset'''
+    num_features = 0
         # applying fileter (chosen words)
     if args.chosen_positive_indcies !='' and args.chosen_negative_indcies!='':
         chosen_p = np.load(args.chosen_positive_indcies)
@@ -396,6 +398,7 @@ if __name__ == "__main__":
         chosen = np.sort(chosen)
         dataset = ExamplesDataset(args.positive, args.negative,
                 args.vocab, chosen_indcies=chosen)
+        num_features = len(chosen)
     else:
         dataset = ExamplesDataset(args.positive, args.negative, args.vocab)
 
@@ -407,9 +410,10 @@ if __name__ == "__main__":
     print("Read in %i train and %i test" % (len(train), len(test)))
 
     ''' Initialize model'''
-    num_features= len(vocab)
-    if args.chosen_positive_indcies !='' and args.chosen_negative_indcies!='':
-        num_featues = len(chosen)
+        # if no selected weights use the whole vocab
+    if args.chosen_positive_indcies =='' or args.chosen_negative_indcies=='':
+        num_features = len(vocab)
+    print(num_features)
 
     if args.ec != "rate":
         lr = LogReg(num_features, args.mu, lambda x: args.step)
