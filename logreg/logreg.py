@@ -329,7 +329,7 @@ class LogReg:
 
 
 ''' ploting function '''
-def plot_test_val(ax, title, train, test, test_point):
+def plot_test_val(ax, title, train, test, test_point, scale):
     '''
     plots a given train and test data
     :param ax: matplotlib ax
@@ -338,11 +338,11 @@ def plot_test_val(ax, title, train, test, test_point):
     :param test: test list
     :param test_point: number
     '''
-    x = np.arange(1, len(test) +1, 1)
+    x = np.arange(1, len(test)+1, 1) / scale
     ax.plot(x, train, label='train', color='r')
     ax.plot(x, test, label='test', color='b')
-    ax.plot([len(test)], [test_point], 'g*')
-    ax.annotate(f"test {title}={test_point:.3f}", xy=(len(test), test_point), xytext=(len(test)-1, test_point-.05))
+    # ax.plot([len(test)], [test_point], 'g*')
+    # ax.annotate(f"test {title}={test_point:.3f}", xy=(len(test), test_point), xytext=(len(test)-1, test_point-.05))
     ax.set_xlabel('Epochs')
     ax.legend()
     ax.set_title(title)
@@ -450,11 +450,11 @@ if __name__ == "__main__":
                     print("    Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
                         (update_number, train_lp, ho_lp, train_acc, ho_acc))
         
-        '''recording losses for ploting'''
-        train_loss_list.append(train_loss)
-        test_loss_list.append(test_loss)
-        train_acc_list.append(train_acc)
-        test_acc_list.append(ho_acc)
+            '''recording losses for ploting'''
+            train_loss_list.append(train_loss)
+            test_loss_list.append(test_loss)
+            train_acc_list.append(train_acc)
+            test_acc_list.append(ho_acc)
 
         """ Early Stoping"""
         if args.early_stop > 0:
@@ -481,8 +481,8 @@ if __name__ == "__main__":
 
     '''ploting results'''
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-    plot_test_val(ax1, 'Loss', train_loss_list, test_loss_list, test_loss)
-    plot_test_val(ax2, 'Accuracy', train_acc_list, test_acc_list, ho_acc)
+    plot_test_val(ax1, 'Loss', train_loss_list, test_loss_list, test_loss, scale=len(train))
+    plot_test_val(ax2, 'Accuracy', train_acc_list, test_acc_list, ho_acc, scale=len(train))
     plt.show()
     fig.savefig(f'figures/{args.plot_name}.png')
 
