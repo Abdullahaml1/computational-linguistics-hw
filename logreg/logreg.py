@@ -8,7 +8,7 @@ import matplotlib_inline
 
 import argparse
 
-SEED = 42
+SEED = 12
 kSEED = 1701
 kBIAS = "BIAS_CONSTANT"
 
@@ -248,6 +248,7 @@ class LogReg:
 
         self.dimension = num_features
         self.beta = np.random.randn(num_features) # weights
+        # self.beta = np.zeros(num_features) # weights
         self.mu = mu
         self.step = step # learning rate
         self.last_update = np.zeros(num_features)
@@ -430,9 +431,9 @@ if __name__ == "__main__":
     test_acc_list=[]
     _, _,last_test_loss = lr.progress(test)
     early_stop_count = args.early_stop
+    update_number = 0
     for pp in range(args.passes):
         print(f'Epoch:{pp+1}')
-        update_number = 0
         for ii in train:
             update_number += 1
             # Do we use extra credit option
