@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib_inline
 
 import argparse
+import json
 
 SEED = 12
 kSEED = 1701
@@ -16,6 +17,17 @@ SMALL_NUMBER = 1e-8
 
 np.random.seed(SEED)
 random.seed(kSEED)
+
+def exp_scheduler(params_dict, lr_0, n):
+    """
+    returns the new learing rate
+    :param params_dict: a dict with {decay :val} where d is decay rate
+    :param lr_0: initial learing rate
+    :param n: itearation value
+    :return : new learing rate
+    """
+    return lr_0 * np.exp(- np.float64(params_dict['decay']) * np.float64(n))
+
 
 
 def sigmoid(score, threshold=20.0):
@@ -266,11 +278,12 @@ class LogReg:
         """
         return sigmoid(np.dot(self.beta, example.x))
 
-    def progress(self, examples):
+    def progress(self, examples, iteration):
         """
         Given a set of examples, compute the probability and accuracy
         :param examples: The dataset to score
-        :return: A tuple of (log probability, accuracy, loss)
+        :param iteration: int of the iteration
+        :return: A tuple of (log probability, accuracy, loss,learingRate)
         """
 
         logprob = 0.0
@@ -291,7 +304,7 @@ class LogReg:
             if abs(ii.y - p) < 0.5:
                 num_right += 1
 
-        return logprob, float(num_right) / float(len(examples)), float(loss/len(examples))
+        return logprob, float(num_right) / float(len(examples)), float(loss/len(examples)), self.step(iteration)
 
     def sg_update(self, train_example, iteration,
                   lazy=False, use_tfidf=False):
@@ -309,7 +322,7 @@ class LogReg:
 
         grad = loss_deriv * sig_deriv * train_example.x
 
-        self.beta -= self.step(1) * grad # self.step is a lamabda function
+        self.beta -= self.step(iteration) * grad # self.step is a lamabda function
 
         return self.beta
 
@@ -366,6 +379,10 @@ if __name__ == "__main__":
                            type=int, default=1, required=False)
     argparser.add_argument("--ec", help="Extra credit option (df, lazy, or rate)",
                            type=str, default="")
+
+
+
+    # Added Features
     argparser.add_argument("--early_stop", help="Early stop of test loss increased | numerical value {-1} ealry stop",
                            type=int, default=-1)
     argparser.add_argument("--normalize", help="normalize the dataset | {yes|no}",
@@ -374,6 +391,13 @@ if __name__ == "__main__":
                            type=str, default='')
     argparser.add_argument("--chosen_negative_indcies", help="a numpy array saved as .npy file",
                            type=str, default='')
+    argparser.add_argument("--learning_rate_scheduler", help="scheuler type {exp, adam}",
+                           type=str, default='')
+    argparser.add_argument("--learning_rate_scheduler_params", help="paramters of scheuler",
+                           type=json.loads, default={})
+
+
+    # Logging
     argparser.add_argument("--log", help="display statics or not | {yes:no}",
                            type=str, default='yes')
     argparser.add_argument("--log_step", help="rate to print single epoch log",
@@ -415,7 +439,13 @@ if __name__ == "__main__":
         num_features = len(vocab)
 
     if args.ec != "rate":
-        lr = LogReg(num_features, args.mu, lambda x: args.step)
+        if args.learning_rate_scheduler=='':
+            learning_rate_func = lambda x: args.step
+        elif args.learning_rate_scheduler=='exp':
+            learning_rate_func = lambda x: exp_scheduler(args.learning_rate_scheduler_params, args.step, x)
+
+        lr = LogReg(num_features, args.mu, learning_rate_func)
+
     else:
         # Modify this code if you do learning rate extra credit
         raise NotImplementedError
@@ -429,7 +459,7 @@ if __name__ == "__main__":
 
     train_acc_list=[]
     test_acc_list=[]
-    _, _,last_test_loss = lr.progress(test)
+    _, _,last_test_loss, _ = lr.progress(test, 0)
     early_stop_count = args.early_stop
     update_number = 0
     for pp in range(args.passes):
@@ -445,11 +475,13 @@ if __name__ == "__main__":
                 lr.sg_update(ii, update_number)
 
             if update_number % args.log_step == 1:
-                train_lp, train_acc, train_loss = lr.progress(train)
-                ho_lp, ho_acc, test_loss = lr.progress(test) # h for hypotheses
+                #train progress
+                train_lp, train_acc, train_loss, learing_rate = lr.progress(train, update_number)
+                #test progress
+                ho_lp, ho_acc, test_loss, learning_rate = lr.progress(test, update_number) # h for hypotheses
                 if args.log=='yes' :
-                    print("    Update %i\tTP %f\tHP %f\tTA %f\tHA %f" %
-                        (update_number, train_lp, ho_lp, train_acc, ho_acc))
+                    print("    Update %i\tTP %f\tHP %f\tTA %f\tHA %f\t lr %f" %
+                        (update_number, train_lp, ho_lp, train_acc, ho_acc, learing_rate))
         
             '''recording losses for ploting'''
             train_loss_list.append(train_loss)
