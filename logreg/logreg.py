@@ -5,6 +5,7 @@ from math import exp, log
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import matplotlib_inline
+import numpy.linalg as LA # numpy liner algebra function
 
 import argparse
 import json
@@ -17,6 +18,9 @@ SMALL_NUMBER = 1e-8
 
 np.random.seed(SEED)
 random.seed(kSEED)
+
+
+
 
 def exp_scheduler(params_dict, lr_0, n):
     """
@@ -62,9 +66,9 @@ def cross_entropy_loss(p, y):
     :return: corssEntropy loss
     """
     if (y==1):
-        return -log2(p)
+        return -np.log(p)
     else:
-        return -log2(1-p)
+        return -np.log(1-p)
 
 
 def cross_entropy_loss_derivative(p, y):
@@ -73,13 +77,7 @@ def cross_entropy_loss_derivative(p, y):
     :param y: true value
     :return: corssEntropy loss dervative
     """
-    return -y/(p + SMALL_NUMBER) - log2(p) + \
-        (1-y)/(1- p + SMALL_NUMBER) + log2(1-p)
-    # if (y==1):
-    #     return -1/(p + SMALL_NUMBER) - log2(p)
-    # else:
-    #     return 1/(1- p + SMALL_NUMBER) + log2(1-p)
-
+    return - y/p + (1-y)/(1-p)
 
 class Example:
     """
@@ -259,9 +257,14 @@ class LogReg:
         """
 
         self.dimension = num_features
-        self.beta = np.random.randn(num_features) # weights
-        # self.beta = np.zeros(num_features) # weights
+        # self.beta = np.random.randn(num_features) # weights
+        self.beta = np.zeros(num_features) # weights
+
+        # for lazu regularizer
         self.mu = mu
+        self.u = np.zeros(num_features)
+        self.mask = np.zeros(num_features)
+
         self.step = step # learning rate
         self.last_update = np.zeros(num_features)
         self.loss_func = loss_func
@@ -324,6 +327,8 @@ class LogReg:
 
         self.beta -= self.step(iteration) * grad # self.step is a lamabda function
 
+        self.mask = train_example.x != 0 # none zeros elements for lazy regularizer
+        # return self.finalize_lazy(iteration)
         return self.beta
 
     def finalize_lazy(self, iteration):
@@ -332,6 +337,8 @@ class LogReg:
         all variables that need it.
         Only implement this function if you do the extra credit.
         """
+        # self.beta[self.mask] += (iteration - self.u[self.mask])* self.step(iteration) /\
+                # self.mu * self.beta[self.mask] 
         return self.beta
 
     def save_weights(self, name):
