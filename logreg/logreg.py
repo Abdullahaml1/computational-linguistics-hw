@@ -467,6 +467,15 @@ if __name__ == "__main__":
     train_acc_list=[]
     test_acc_list=[]
     _, _,last_test_loss, _ = lr.progress(test, 0)
+
+    least_test_loss = np.inf
+    least_test_epoch = 0
+    least_test_logp = 0
+    least_test_loss_acc=0
+    least_test_loss_train_loss= 0
+    least_train_logp = 0
+    least_test_loss_train_acc=0
+
     early_stop_count = args.early_stop
     update_number = 0
     for pp in range(args.passes):
@@ -503,6 +512,18 @@ if __name__ == "__main__":
             if early_stop_count ==0:
                 print('Early Stop')
                 break
+            if test_loss < least_test_loss:
+                least_test_loss = test_loss
+                least_test_epoch = pp + 1
+                least_test_logp =  ho_lp
+                least_test_loss_acc= ho_acc
+                least_test_loss_train_loss= train_loss
+                least_train_logp = train_lp
+                least_test_loss_train_acc= train_acc
+                '''saving weights'''
+                if args.save_weights_path!='':
+                    lr.save_weights(args.save_weights_path)
+
             last_test_loss = test_loss
 
         ''' displaying loss'''
@@ -515,9 +536,6 @@ if __name__ == "__main__":
     print(f"Train logP={train_lp:f} Test logP={ho_lp:f} Train Acc={train_acc:f} Test Acc={ho_acc:f} " +
             f'TrainLoss={train_loss:f} TestLoss={test_loss:f}')
 
-    '''saving weights'''
-    if args.save_weights_path!='':
-        lr.save_weights(args.save_weights_path)
 
     '''ploting results'''
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
@@ -525,4 +543,10 @@ if __name__ == "__main__":
     plot_test_val(ax2, 'Accuracy', train_acc_list, test_acc_list, ho_acc, scale=len(train))
     plt.show()
     fig.savefig(f'figures/{args.plot_name}.png')
+
+    ''' Last Log Print'''
+
+    print(f'Saveing weights for epoch={least_test_epoch}, Least Test Loss={least_test_loss:f}')
+    print(f"Train logP={least_train_logp:f} Test logP={least_test_logp:f} Train Acc={least_test_loss_train_acc:f} Test Acc={least_test_loss_acc:f} " +
+            f'TrainLoss={least_test_loss_train_loss:f} TestLoss={least_test_loss:f}')
 
