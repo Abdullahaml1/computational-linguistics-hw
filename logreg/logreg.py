@@ -327,8 +327,10 @@ class LogReg:
 
         self.beta -= self.step(iteration) * grad # self.step is a lamabda function
 
+        # for finalize_lazy
         self.mask = train_example.x != 0 # none zeros elements for lazy regularizer
-        # return self.finalize_lazy(iteration)
+        if lazy==True:
+            return self.finalize_lazy(iteration)
         return self.beta
 
     def finalize_lazy(self, iteration):
@@ -337,8 +339,9 @@ class LogReg:
         all variables that need it.
         Only implement this function if you do the extra credit.
         """
-        # self.beta[self.mask] += (iteration - self.u[self.mask])* self.step(iteration) /\
-                # self.mu * self.beta[self.mask] 
+        self.beta[self.mask] -= (iteration - self.u[self.mask])* self.step(iteration) *\
+                self.mu * self.beta[self.mask] 
+        self.u[self.mask] = iteration
         return self.beta
 
     def save_weights(self, name):
@@ -372,7 +375,7 @@ def plot_test_val(ax, title, train, test, test_point, scale):
     
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("--mu", help="Weight of L2 regression",
+    argparser.add_argument("--mu", help="Weight lazy regularaizer",
                            type=float, default=0.0, required=False)
     argparser.add_argument("--step", help="Initial SG step size (learning rate)",
                            type=float, default=0.1, required=False)
@@ -446,10 +449,10 @@ if __name__ == "__main__":
         num_features = len(vocab)
 
     if args.ec != "rate":
-        if args.learning_rate_scheduler=='':
-            learning_rate_func = lambda x: args.step
-        elif args.learning_rate_scheduler=='exp':
+        if args.learning_rate_scheduler=='exp':
             learning_rate_func = lambda x: exp_scheduler(args.learning_rate_scheduler_params, args.step, x)
+        else:
+            learning_rate_func = lambda x: args.step
 
         lr = LogReg(num_features, args.mu, learning_rate_func)
 
