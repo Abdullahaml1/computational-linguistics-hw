@@ -87,12 +87,12 @@ class QuestionDataset(Dataset):
             self.questions.append(qq)
             self.labels.append(ll)
         
-        if type(self.labels[0])==str:
-            for i in range(len(self.labels)):
-                try:
-                    self.labels[i] = class2ind[self.labels[i]]
-                except:
-                    self.labels[i] = num_classes
+        # if type(self.labels[0])==str:
+        for i in range(len(self.labels)):
+            try:
+                self.labels[i] = class2ind[self.labels[i]]
+            except:
+                self.labels[i] = num_classes
         self.word2ind = word2ind
     
     ###You don't need to change this funtion
@@ -161,6 +161,35 @@ def batchify(batch):
         x1[i, :len(question_text)].copy_(vec)
     q_batch = {'text': x1, 'len': torch.FloatTensor(question_len), 'labels': target_labels}
     return q_batch
+
+def evaluate_test(data_loader, model, device):
+    """
+    evaluate the current model, get the accuracy for dev/test set
+    Keyword arguments:
+    data_loader: pytorch build-in data loader output
+    model: model to be evaluated
+    device: cpu of gpu
+    """
+
+    model.eval()
+    num_examples = 0
+    error = 0
+    with torch.no_grad():
+        for idx, batch in enumerate(data_loader):
+            question_text = batch['text'].to(device)
+            question_len = batch['len']
+            labels = batch['labels']
+    
+            ####Your code here
+    
+            logits = model(question_text, question_len) # shape [batch x num_classes]
+            top_n, top_i = logits.topk(1)
+            num_examples += question_text.size(0)
+            error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
+    accuracy = 1 - error / num_examples
+    print('accuracy', accuracy)
+    return accuracy
+
 
 
 def evaluate(data_loader, model, device):
@@ -343,7 +372,8 @@ if __name__ == "__main__":
     parser.add_argument('--save-model', type=str, default='q_type.pt')
     parser.add_argument('--load-model', type=str, default='q_type.pt')
     parser.add_argument("--limit", help="Number of training documents", type=int, default=-1, required=False)
-    parser.add_argument('--checkpoint', type=int, default=50)
+    parser.add_argument('--checkpoint', type=int, default=10)
+    parser.add_argument("--num-workers", help="Number of workers", type=int, default=4, required=False)
 
     args = parser.parse_args()
     #### check if using gpu is available
@@ -371,9 +401,11 @@ if __name__ == "__main__":
         #### Load batchifed dataset
         test_dataset = QuestionDataset(test_exs, word2ind, num_classes, class2ind)
         test_sampler = torch.utils.data.sampler.SequentialSampler(test_dataset)
-        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                               sampler=test_sampler, num_workers=0,
-                                               collate_fn=batchify)
+        test_loader = torch.utils.data.DataLoader(test_dataset,
+                                                batch_size=args.batch_size,
+                                                sampler=test_sampler,
+                                                num_workers=args.num_workers,
+                                                collate_fn=batchify)
         evaluate(test_loader, model, device)
     else:
         if args.resume:
@@ -395,13 +427,15 @@ if __name__ == "__main__":
         dev_dataset = QuestionDataset(dev_exs, word2ind, num_classes, class2ind)
         dev_sampler = torch.utils.data.sampler.SequentialSampler(dev_dataset)
         dev_loader = torch.utils.data.DataLoader(dev_dataset, batch_size=args.batch_size,
-                                               sampler=dev_sampler, num_workers=0,
+                                               sampler=dev_sampler,
+                                               num_workers=args.num_workers,
                                                collate_fn=batchify)
 
         ''' Debug Print '''
         # train_loader_debug = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-        #                                     sampler=train_sampler, num_workers=4,
-        #                                     collate_fn=batchify)
+        #                                       sampler=train_sampler,
+        #                                       num_workers=args.num_workers,
+        #                                       collate_fn=batchify)
         # train_sample = next(iter(train_loader_debug))
         # print('Debug DebugDebugDebugDebug----------------')
         # print(train_sample['text'].shape) # [batch x 60]
@@ -413,14 +447,19 @@ if __name__ == "__main__":
         for epoch in range(args.num_epochs):
             print('start epoch %d' % epoch)
             train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               sampler=train_sampler, num_workers=0,
+                                               sampler=train_sampler,
+                                               num_workers=args.num_workers,
                                                collate_fn=batchify)
             accuracy = train(args, model, train_loader, dev_loader, accuracy, device)
+            print('----------------------------------------------------------')
+            print()
         print('start testing:\n')
 
         test_dataset = QuestionDataset(test_exs, word2ind, num_classes, class2ind)
         test_sampler = torch.utils.data.sampler.SequentialSampler(test_dataset)
-        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                               sampler=test_sampler, num_workers=0,
-                                               collate_fn=batchify)
+        test_loader = torch.utils.data.DataLoader(test_dataset,
+                                                batch_size=args.batch_size,
+                                                sampler=test_sampler,
+                                                num_workers=args.num_workers,
+                                                collate_fn=batchify)
         evaluate(test_loader, model, device)
