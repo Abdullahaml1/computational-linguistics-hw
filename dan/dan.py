@@ -28,18 +28,24 @@ def class_labels(data):
 def load_data(filename, lim):
     """
     load the json file into data list
+    param filename: josn faile as list of dictionaries
+        i.e: [{'question_text': 'what a code !', 'label':1}, .....]
     """
 
     data = list()
     with open(filename) as json_data:
         if lim>0:
-            questions = json.load(json_data)["questions"][:lim]
+            # questions = json.load(json_data)["questions"][:lim]
+            questions = json.load(json_data)[:lim] # list
         else:
-            questions = json.load(json_data)["questions"]
+            # questions = json.load(json_data)["questions"]
+            questions = json.load(json_data) #list
         for q in questions:
-            q_text = nltk.word_tokenize(q['text'])
+            q_text = nltk.word_tokenize(q['question_text'])
+            # q_text = nltk.word_tokenize(q['text'])
             #label = q['category']
-            label = q['page']
+            label = q['label']
+            # label = q['page']
             if label:
                 data.append((q_text, label))
     return data
@@ -116,6 +122,11 @@ class QuestionDataset(Dataset):
         #### You should consider the out of vocab(OOV) cases
         #### question_text is already tokenized    
         ####Your code here
+        for ii in range(len(ex)):
+            if ex[ii] not in word2ind:
+                vec_text[ii] = word2ind[kUNK]
+            else:
+                vec_text[ii] = word2ind[ex[ii]]
 
 
 
@@ -130,6 +141,9 @@ def batchify(batch):
     which includes the question text, question length and labels 
     Keyword arguments:
     batch: list of outputs from vectorize function
+    :return: dictionary -> {'text': tensor(batch x max(question_len)),
+                            'len;: tensor(batch x 1),
+                            'label': tensor(batch x 1)
     """
 
     question_len = list()
@@ -139,6 +153,7 @@ def batchify(batch):
         label_list.append(ex[1])
 
     target_labels = torch.LongTensor(label_list)
+    # initializing the input vector and pad the rest with zeros
     x1 = torch.LongTensor(len(question_len), max(question_len)).zero_()
     for i in range(len(question_len)):
         question_text = batch[i][0]
@@ -167,6 +182,7 @@ def evaluate(data_loader, model, device):
 
         ####Your code here
 
+        logits = model(question_text, question_len) # shape [batch x num_classes]
         top_n, top_i = logits.topk(1)
         num_examples += question_text.size(0)
         error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
@@ -202,6 +218,22 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
         labels = batch['labels']
 
         #### Your code here
+        question_text.to(device)
+        question_len.to(device)
+        labels.to(device)
+
+
+        # forward
+        pred = model(question_text, question_len)
+
+        # computing loss
+        loss = criterion(pred, labels)
+
+
+        # computing gradient
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
         
 
         clip_grad_norm_(model.parameters(), args.grad_clipping) 
@@ -213,7 +245,10 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
 
             print('number of steps: %d, loss: %.5f time: %.5f' % (idx, print_loss_avg, time.time()- start))
             print_loss_total = 0
+
+            # Applying Devset
             curr_accuracy = evaluate(dev_data_loader, model, device)
+
             if accuracy < curr_accuracy:
                 torch.save(model, args.save_model)
                 accuracy = curr_accuracy
@@ -242,6 +277,7 @@ class DanModel(nn.Module):
         self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
         self.linear1 = nn.Linear(emb_dim, n_hidden_units)
         self.linear2 = nn.Linear(n_hidden_units, n_classes)
+        self._softmax = nn.Softmax(dim=1) # dim == axis
 
         # Create the actual prediction framework for the DAN classifier.
 
@@ -253,6 +289,11 @@ class DanModel(nn.Module):
         # For test cases, the network we consider is - linear1 -> ReLU() -> Dropout(0.5) -> linear2
 
         #### Your code here
+        self.linear_stack = torch.nn.Sequential(self.linear1,
+                                                torch.nn.ReLU(),
+                                                torch.nn.Dropout(self.nn_dropout),
+                                                self.linear2)
+
         
         
        
@@ -261,18 +302,21 @@ class DanModel(nn.Module):
         Model forward pass, returns the logits of the predictions.
         
         Keyword arguments:
-        input_text : vectorized question text 
+        input_text : vectorized question text  [batch x questin_list]
         text_len : batch * 1, text length for each question
         is_prob: if True, output the softmax of last layer
         """
 
-        logits = torch.LongTensor([0.0] * self.n_classes)
+        # logits = torch.LongTensor([0.0] * self.n_classes)
 
         # Complete the forward funtion.  First look up the word embeddings.
+        embd = self.embeddings(input_text) #batch x seq_len x embed_len
         
         # Then average them 
+        embd = embd.sum(axis=1)/text_len.reshape([-1, 1]) # batch x embed_len
         
         # Before feeding them through the network
+        logits = self.linear_stack(embd) # batch x label_len
         
 
         if is_prob:
@@ -288,9 +332,9 @@ class DanModel(nn.Module):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Question Type')
     parser.add_argument('--no-cuda', action='store_true', default=True)
-    parser.add_argument('--train-file', type=str, default='../qanta.train.json')
-    parser.add_argument('--dev-file', type=str, default='../qanta.dev.json')
-    parser.add_argument('--test-file', type=str, default='../qanta.test.json')
+    parser.add_argument('--train-file', type=str, default='data/question_train_cl1.json')
+    parser.add_argument('--dev-file', type=str, default='data/question_dev_cl1.json')
+    parser.add_argument('--test-file', type=str, default='data/question_test_cl1.json')
     parser.add_argument('--batch-size', type=int, default=128)
     parser.add_argument('--num-epochs', type=int, default=20)
     parser.add_argument('--grad-clipping', type=int, default=5)
@@ -342,11 +386,29 @@ if __name__ == "__main__":
         train_dataset = QuestionDataset(train_exs, word2ind, num_classes, class2ind)
         train_sampler = torch.utils.data.sampler.RandomSampler(train_dataset)
 
+        ''' Debug Print '''
+        # train_sample = next(iter(train_dataset))
+        # print('Debug DebugDebugDebugDebug----------------')
+        # print(train_sample[0])
+        # print(train_sample[1])
+
         dev_dataset = QuestionDataset(dev_exs, word2ind, num_classes, class2ind)
         dev_sampler = torch.utils.data.sampler.SequentialSampler(dev_dataset)
         dev_loader = torch.utils.data.DataLoader(dev_dataset, batch_size=args.batch_size,
                                                sampler=dev_sampler, num_workers=0,
                                                collate_fn=batchify)
+
+        ''' Debug Print '''
+        # train_loader_debug = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
+        #                                     sampler=train_sampler, num_workers=4,
+        #                                     collate_fn=batchify)
+        # train_sample = next(iter(train_loader_debug))
+        # print('Debug DebugDebugDebugDebug----------------')
+        # print(train_sample['text'].shape) # [batch x 60]
+        # print(train_sample['len'].shape) # [batch x 60]
+        # print(train_sample['labels'].shape) # [batch]
+        # print(model(train_sample['text'],train_sample['len']).shape)
+
         accuracy = 0
         for epoch in range(args.num_epochs):
             print('start epoch %d' % epoch)
