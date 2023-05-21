@@ -8,6 +8,7 @@ from torch.nn.utils import clip_grad_norm_
 import json
 import time
 import nltk
+import matplotlib.pyplot as plt
 
 kUNK = '<unk>'
 kPAD = '<pad>'
@@ -192,7 +193,7 @@ def evaluate_test(data_loader, model, device):
 
 
 
-def evaluate(data_loader, model, device):
+def evaluate(data_loader, model, loss_fun, device):
     """
     evaluate the current model, get the accuracy for dev/test set
     Keyword arguments:
@@ -204,21 +205,30 @@ def evaluate(data_loader, model, device):
     model.eval()
     num_examples = 0
     error = 0
-    for idx, batch in enumerate(data_loader):
-        question_text = batch['text'].to(device)
-        question_len = batch['len']
-        labels = batch['labels']
 
-        ####Your code here
+    total_loss = 0.0
+    num_examples = 0
+    with torch.no_grad():
+        for idx, batch in enumerate(data_loader):
+            question_text = batch['text'].to(device)
+            question_len = batch['len']
+            labels = batch['labels']
+    
+            ####Your code here
 
-        logits = model(question_text, question_len) # shape [batch x num_classes]
-        top_n, top_i = logits.topk(1)
-        num_examples += question_text.size(0)
-        error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
-    accuracy = 1 - error / num_examples
-    print('accuracy', accuracy)
-    return accuracy
+            logits = model(question_text, question_len) # shape [batch x num_classes]
+            top_n, top_i = logits.topk(1)
+            num_examples += question_text.size(0)
+            error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
 
+            # Loss
+            total_loss += loss_fun(logits, labels).item()
+
+        # Accuracy
+        accuracy = 1 - error / num_examples
+        avg_loss = total_loss/num_examples
+    # print(f'Dev accuracy={accuracy:f}, Dev average Loss={avg_loss:f}')
+    return accuracy, avg_loss
 
 def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
     """
@@ -240,6 +250,13 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
     start = time.time()
 
     #### modify the following code to complete the training funtion
+    train_loss_list= []
+    train_acc_list = []
+    train_error = 0
+    num_train_examples = 0
+
+    dev_loss_list = []
+    dev_acc_list = []
 
     for idx, batch in enumerate(train_data_loader):
         question_text = batch['text'].to(device)
@@ -269,19 +286,52 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
         print_loss_total += loss.data.numpy()
         epoch_loss_total += loss.data.numpy()
 
-        if idx % args.checkpoint == 0 and idx > 0:
-            print_loss_avg = print_loss_total / args.checkpoint
 
-            print('number of steps: %d, loss: %.5f time: %.5f' % (idx, print_loss_avg, time.time()- start))
-            print_loss_total = 0
+        # Logging train accuracy
+        _, top_i = pred.topk(1, dim=1)
+        train_error = torch.nonzero(labels.squeeze() - top_i.squeeze()).shape[0]
+        num_train_examples += question_text.shape[0]
+
+        # Reaching checkpoint
+        if idx % args.checkpoint == 0 and idx > 0:
+
 
             # Applying Devset
-            curr_accuracy = evaluate(dev_data_loader, model, device)
+            dev_curr_accuracy, dev_curr_loss = evaluate(dev_data_loader, model,
+                    nn.CrossEntropyLoss(), device)
 
-            if accuracy < curr_accuracy:
+            # Logging Train Loss and Accuracy
+            # print_loss_avg = print_loss_total / args.checkpoint
+            print_loss_avg = print_loss_total / num_train_examples
+            train_loss_list.append(print_loss_avg.item())
+
+            train_acc = 1- train_error/num_train_examples
+            train_acc_list.append(train_acc)
+
+            num_train_examples = 0
+            train_error =0
+            print_loss_total = 0
+
+            # Logging Dev Loss and Accuracy
+            dev_acc_list.append(dev_curr_accuracy)
+            dev_loss_list.append(dev_curr_loss)
+
+            if accuracy < dev_curr_accuracy:
                 torch.save(model, args.save_model)
-                accuracy = curr_accuracy
-    return accuracy
+                accuracy = dev_curr_accuracy
+
+
+            # print('number of steps: %d, loss: %.5f time: %.5f' % (idx, print_loss_avg, time.time()- start))
+            print(f'# of steps={idx}, Avg Train Loss={print_loss_avg:f}'+ 
+                    f', Avg Dev Loss={dev_curr_loss:f}, Train Acc={train_acc:f}'+ 
+                    f', Dev Acc={dev_curr_accuracy:f}, Time: {time.time()-start:f}') 
+
+    return {'dev_current_acc': accuracy,
+            'train_acc_epoch': train_acc_list,
+            'train_loss_epoch': train_loss_list,
+            'dev_acc_epoch': dev_acc_list,
+            'dev_loss_epoch': dev_loss_list}
+
 
 
 
@@ -353,6 +403,34 @@ class DanModel(nn.Module):
 
         return logits
 
+''' ploting function '''
+def plot_model(train, test, num_epochs):
+    '''
+    plots a given train and test data
+    :param ax: matplotlib ax
+    :param title: str
+    :param train: train list
+    :param test: test list
+    :param test_point: number
+    '''
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+
+    def plot_val(ax, title, train, test, num_epochs=num_epochs):
+        x = np.arange(1, len(test)+1, 1) * (num_epochs / len(test))
+        ax.plot(x, train, label='train', color='r')
+        ax.plot(x, test, label='dev', color='b')
+        # ax.plot([len(test)], [test_point], 'g*')
+        # ax.annotate(f"test {title}={test_point:.3f}", xy=(len(test), test_point), xytext=(len(test)-1, test_point-.05))
+        ax.set_xlabel('Epochs')
+        ax.legend()
+        ax.set_title(title)
+        ax.grid()
+
+    plot_val(ax1, 'Accuracy', train['accuracy'], test['accuracy']) 
+    plot_val(ax2, 'Loss', train['loss'], test['loss']) 
+    return fig, (ax1, ax2)
+
 
 
 # You basically do not need to modify the below code 
@@ -406,9 +484,10 @@ if __name__ == "__main__":
                                                 sampler=test_sampler,
                                                 num_workers=args.num_workers,
                                                 collate_fn=batchify)
-        evaluate(test_loader, model, device)
+        evaluate(test_loader, model,nn.CrossEntropyLoss, device)
     else:
         if args.resume:
+            print('Resuming.....')
             model = torch.load(args.load_model)
         else:
             model = DanModel(num_classes, len(voc))
@@ -444,17 +523,40 @@ if __name__ == "__main__":
         # print(model(train_sample['text'],train_sample['len']).shape)
 
         accuracy = 0
+        train_acc_list = []
+        train_loss_list =[]
+        dev_acc_list = []
+        dev_loss_list = []
         for epoch in range(args.num_epochs):
             print('start epoch %d' % epoch)
             train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
                                                sampler=train_sampler,
                                                num_workers=args.num_workers,
                                                collate_fn=batchify)
-            accuracy = train(args, model, train_loader, dev_loader, accuracy, device)
+            log_dict = train(args, model, train_loader, dev_loader, accuracy, device)
+
+            accuracy = log_dict['dev_current_acc']
+            train_acc_list.append(log_dict['train_acc_epoch'])
+            train_loss_list.append(log_dict['train_loss_epoch'])
+            dev_acc_list.append(log_dict['dev_acc_epoch'])
+            dev_loss_list.append(log_dict['dev_loss_epoch'])
             print('----------------------------------------------------------')
             print()
-        print('start testing:\n')
 
+        # Plotting
+        train_dict = {'accuracy': np.array(train_acc_list).reshape([-1,]),
+                        'loss': np.array(train_loss_list).reshape([-1,])}
+        dev_dict = {'accuracy': np.array(dev_acc_list).reshape([-1]),
+                    'loss': np.array(dev_loss_list).reshape([-1])}
+        # print(train_dict['accuracy'])
+        # print(train_dict['loss'])
+        # print(dev_dict['accuracy'])
+        # print(dev_dict['loss'])
+        fig, (ax1, ax2)= plot_model(train_dict, dev_dict, num_epochs=args.num_epochs)
+        plt.show()
+        fig.savefig(f'./plot.png')
+
+        print('start testing:\n')
         test_dataset = QuestionDataset(test_exs, word2ind, num_classes, class2ind)
         test_sampler = torch.utils.data.sampler.SequentialSampler(test_dataset)
         test_loader = torch.utils.data.DataLoader(test_dataset,
@@ -462,4 +564,5 @@ if __name__ == "__main__":
                                                 sampler=test_sampler,
                                                 num_workers=args.num_workers,
                                                 collate_fn=batchify)
-        evaluate(test_loader, model, device)
+        test_acc, test_loss = evaluate(test_loader, model, nn.CrossEntropyLoss(), device)
+        print(f'Test Acc={test_acc}, Test Loss={test_loss}')
