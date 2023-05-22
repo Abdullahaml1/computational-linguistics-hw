@@ -2,6 +2,7 @@ import argparse
 import torch
 import torch.nn as nn
 import numpy as np
+import random
 
 from torch.utils.data import Dataset
 from torch.nn.utils import clip_grad_norm_
@@ -9,6 +10,12 @@ import json
 import time
 import nltk
 import matplotlib.pyplot as plt
+
+SEED = 1
+
+torch.manual_seed(SEED)
+np.random.seed(SEED)
+random.seed(SEED)
 
 kUNK = '<unk>'
 kPAD = '<pad>'
@@ -257,6 +264,7 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
 
     dev_loss_list = []
     dev_acc_list = []
+    new_best = False
 
     for idx, batch in enumerate(train_data_loader):
         question_text = batch['text'].to(device)
@@ -317,8 +325,13 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
             dev_loss_list.append(dev_curr_loss)
 
             if accuracy < dev_curr_accuracy:
+                print('Saving Model ............')
+                new_best = True
                 torch.save(model, args.save_model)
                 accuracy = dev_curr_accuracy
+
+            else:
+                new_bet = False
 
 
             # print('number of steps: %d, loss: %.5f time: %.5f' % (idx, print_loss_avg, time.time()- start))
@@ -326,7 +339,8 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
                     f', Avg Dev Loss={dev_curr_loss:f}, Train Acc={train_acc:f}'+ 
                     f', Dev Acc={dev_curr_accuracy:f}, Time: {time.time()-start:f}') 
 
-    return {'dev_current_acc': accuracy,
+    return {'dev_best_acc': accuracy,
+            'new_best': new_best,
             'train_acc_epoch': train_acc_list,
             'train_loss_epoch': train_loss_list,
             'dev_acc_epoch': dev_acc_list,
@@ -417,7 +431,8 @@ def plot_model(train, test, num_epochs):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
     def plot_val(ax, title, train, test, num_epochs=num_epochs):
-        x = np.arange(1, len(test)+1, 1) * (num_epochs / len(test))
+        # x = np.arange(1, len(test)+1, 1) * (num_epochs / len(test))
+        x = np.arange(len(test)) * ((num_epochs-1) / (len(test)-1))
         ax.plot(x, train, label='train', color='r')
         ax.plot(x, test, label='dev', color='b')
         # ax.plot([len(test)], [test_point], 'g*')
@@ -450,7 +465,7 @@ if __name__ == "__main__":
     parser.add_argument('--save-model', type=str, default='q_type.pt')
     parser.add_argument('--load-model', type=str, default='q_type.pt')
     parser.add_argument("--limit", help="Number of training documents", type=int, default=-1, required=False)
-    parser.add_argument('--checkpoint', type=int, default=10)
+    parser.add_argument('--checkpoint', type=int, default=21)
     parser.add_argument("--num-workers", help="Number of workers", type=int, default=4, required=False)
 
     args = parser.parse_args()
@@ -522,11 +537,13 @@ if __name__ == "__main__":
         # print(train_sample['labels'].shape) # [batch]
         # print(model(train_sample['text'],train_sample['len']).shape)
 
+        ''' Training LOOOP'''
         accuracy = 0
         train_acc_list = []
         train_loss_list =[]
         dev_acc_list = []
         dev_loss_list = []
+        best_epoch = 0
         for epoch in range(args.num_epochs):
             print('start epoch %d' % epoch)
             train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
@@ -534,8 +551,10 @@ if __name__ == "__main__":
                                                num_workers=args.num_workers,
                                                collate_fn=batchify)
             log_dict = train(args, model, train_loader, dev_loader, accuracy, device)
+            if log_dict['new_best']:
+                best_epoch = epoch
 
-            accuracy = log_dict['dev_current_acc']
+            accuracy = log_dict['dev_best_acc']
             train_acc_list.append(log_dict['train_acc_epoch'])
             train_loss_list.append(log_dict['train_loss_epoch'])
             dev_acc_list.append(log_dict['dev_acc_epoch'])
@@ -548,14 +567,11 @@ if __name__ == "__main__":
                         'loss': np.array(train_loss_list).reshape([-1,])}
         dev_dict = {'accuracy': np.array(dev_acc_list).reshape([-1]),
                     'loss': np.array(dev_loss_list).reshape([-1])}
-        # print(train_dict['accuracy'])
-        # print(train_dict['loss'])
-        # print(dev_dict['accuracy'])
-        # print(dev_dict['loss'])
         fig, (ax1, ax2)= plot_model(train_dict, dev_dict, num_epochs=args.num_epochs)
         plt.show()
         fig.savefig(f'./plot.png')
 
+        print(f'Best Epoch = {best_epoch}')
         print('start testing:\n')
         test_dataset = QuestionDataset(test_exs, word2ind, num_classes, class2ind)
         test_sampler = torch.utils.data.sampler.SequentialSampler(test_dataset)
