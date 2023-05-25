@@ -3,7 +3,7 @@
 *.py[cod]
 
 # dan model weights
-**/.pt
+**/*.pt
 
 # C extensions
 *.so
