@@ -2,6 +2,9 @@
 **/.ipynb_checkpoints/
 *.py[cod]
 
+# dan model weights
+*.pt
+
 # C extensions
 *.so
 
