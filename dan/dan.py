@@ -80,6 +80,35 @@ def load_words(exs):
     words = [kPAD, kUNK] + words
     return words, word2ind, ind2word
 
+def load_glove(weights_path):
+    # Unkown token in i_to_word[-1] <unk> in orignal
+    # weighs, but after adding padding i_to_word[<unk>]=-2
+    # i_to_word[<pad>] = -1
+    i_to_word,embeddings = [],[]
+    words = set()
+    word_to_i = {}
+    with open(weights_path,'rt') as fi:
+        full_content = fi.read().strip().split('\n')
+        # print(full_content[-1])
+    for i in range(len(full_content)):
+        word = full_content[i].split(' ')[0]
+        embed = [float(val) for val in full_content[i].split(' ')[1:]]
+        i_to_word.append(word)
+        word_to_i[word] = i
+        words.add(word)
+        embeddings.append(embed)
+
+    # adding padding token:
+    i_to_word.append(kPAD)
+    word_to_i[kPAD] = len(word_to_i)
+    words.add(kPAD)
+    embeddings.append(len(embeddings[0]) * [0.0]) 
+    # print(embeddings[word_to_i[kPAD]][:10])
+
+    return (words, word_to_i, i_to_word,
+            torch.tensor(embeddings))
+
+
 
 class QuestionDataset(Dataset):
     """
@@ -135,9 +164,6 @@ class QuestionDataset(Dataset):
                 vec_text[ii] = word2ind[kUNK]
             else:
                 vec_text[ii] = word2ind[ex[ii]]
-
-
-
         return vec_text
 
     
@@ -326,12 +352,10 @@ def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
 
             if accuracy < dev_curr_accuracy:
                 print('Saving Model ............')
-                new_best = True
                 torch.save(model, args.save_model)
-                accuracy = dev_curr_accuracy
 
-            else:
-                new_bet = False
+                new_best = True
+                accuracy = dev_curr_accuracy
 
 
             # print('number of steps: %d, loss: %.5f time: %.5f' % (idx, print_loss_avg, time.time()- start))
@@ -360,15 +384,26 @@ class DanModel(nn.Module):
 
 
     def __init__(self, n_classes, vocab_size, emb_dim=50,
-                 n_hidden_units=50, nn_dropout=.5):
+                 n_hidden_units=50, nn_dropout=.5, padding_idx=0,
+                 glove_embeddings=None):
         super(DanModel, self).__init__()
         self.n_classes = n_classes
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
         self.n_hidden_units = n_hidden_units
         self.nn_dropout = nn_dropout
-        self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
-        self.linear1 = nn.Linear(emb_dim, n_hidden_units)
+
+        # Embedding Layer
+        if glove_embeddings != None :
+            self.embeddings = nn.Embedding.from_pretrained(glove_embeddings,
+                                    padding_idx=padding_idx)
+            self.emb_dim = self.embeddings.embedding_dim
+            # self.emb_dim = glove_embeddings.shape[1]
+        else:
+            self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim,
+                    padding_idx=padding_idx)
+
+        self.linear1 = nn.Linear(self.emb_dim, n_hidden_units)
         self.linear2 = nn.Linear(n_hidden_units, n_classes)
         self._softmax = nn.Softmax(dim=1) # dim == axis
 
@@ -467,11 +502,19 @@ if __name__ == "__main__":
     parser.add_argument("--limit", help="Number of training documents", type=int, default=-1, required=False)
     parser.add_argument('--checkpoint', type=int, default=21)
     parser.add_argument("--num-workers", help="Number of workers", type=int, default=4, required=False)
+    parser.add_argument('--use-glove', action='store_true', help='Wather to use glove or not', default=False)
+    parser.add_argument("--glove-weights", help="Path to glove weights", type=str, default='', required=False)
 
     args = parser.parse_args()
     #### check if using gpu is available
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if args.cuda else "cpu")
+
+    # model name
+    if args.use_glove:
+        args.save_model= f'glove_{args.glove_weights.split(".")[-2]}_{args.save_model}'
+    else:
+        args.save_model = f'normal_50d_{args.save_model}'
 
     ### Load data
     train_exs = load_data(args.train_file, args.limit)
@@ -479,12 +522,16 @@ if __name__ == "__main__":
     test_exs = load_data(args.test_file, -1)
 
     ### Create vocab
-    voc, word2ind, ind2word = load_words(train_exs)
+    if args.use_glove:
+        print('Loading Glove Embeddings.......')
+        voc, word2ind, ind2word, glove_embeddings = load_glove(args.glove_weights)
+    else:
+        voc, word2ind, ind2word = load_words(train_exs)
 
     #get num_classes from training + dev examples - this can then also be used as int value for those test class labels not seen in training+dev.
     num_classes = len(list(set([ex[1] for ex in train_exs+dev_exs])))
 
-    print(num_classes)
+    print('Number of Classes=', num_classes)
 
     #get class to int mapping
     class2ind, ind2class = class_labels(train_exs + dev_exs)  
@@ -505,7 +552,13 @@ if __name__ == "__main__":
             print('Resuming.....')
             model = torch.load(args.load_model)
         else:
-            model = DanModel(num_classes, len(voc))
+            if args.use_glove:
+                model = DanModel(num_classes, len(voc),
+                        glove_embeddings=glove_embeddings,
+                        padding_idx=word2ind[kPAD])
+            else:
+                model = DanModel(num_classes, len(voc))
+
             model.to(device)
         print(model)
         #### Load batchifed dataset
@@ -569,7 +622,10 @@ if __name__ == "__main__":
                     'loss': np.array(dev_loss_list).reshape([-1])}
         fig, (ax1, ax2)= plot_model(train_dict, dev_dict, num_epochs=args.num_epochs)
         plt.show()
-        fig.savefig(f'./plot.png')
+        if args.use_glove:
+            fig.savefig(f'./glove_{args.glove_weights.split(".")[-2]}_plot.png')
+        else:
+            fig.savefig(f'./normal_50d_plot.png')
 
         print(f'Best Epoch = {best_epoch}')
         print('start testing:\n')
