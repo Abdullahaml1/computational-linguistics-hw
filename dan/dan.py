@@ -581,6 +581,7 @@ if __name__ == "__main__":
        voc, word2ind, ind2word, glove_embeddings = load_glove(args.glove_weights)
     else:
        voc, word2ind, ind2word = load_words(train_exs)
+    kPAD_IND = word2ind[kPAD]
 
     #get num_classes from training + dev examples - this can then also be used as int value for those test class labels not seen in training+dev.
     num_classes = len(list(set([ex[1] for ex in train_exs+dev_exs])))
@@ -626,7 +627,6 @@ if __name__ == "__main__":
                 model = DanModel(num_classes, len(voc),
                         glove_embeddings=glove_embeddings,
                         padding_idx=word2ind[kPAD])
-                kPAD_IND = word2ind[kPAD]
             else:
                 model = DanModel(num_classes, len(voc))
 
