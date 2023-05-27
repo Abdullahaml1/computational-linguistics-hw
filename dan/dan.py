@@ -25,7 +25,7 @@ def class_labels(data):
     class_to_i = {}
     i_to_class = {}
     i = 0
-    for _, ans in data:
+    for _, ans, _ in data:
         if ans not in class_to_i.keys():
             class_to_i[ans] = i
             i_to_class[i] = ans
@@ -48,7 +48,7 @@ def load_data(filename, lim):
         else:
             # questions = json.load(json_data)["questions"]
             questions = json.load(json_data) #list
-        for q in questions:
+        for i, q in enumerate(questions):
             q_text = nltk.word_tokenize(q['question_text'])
             # q_text = nltk.word_tokenize(q['text'])
             #label = q['category']
@@ -56,7 +56,7 @@ def load_data(filename, lim):
             # label = q['page']
             # if label : # Error bypassing label: 0
             if label != None:
-                data.append((q_text, label))
+                data.append((q_text, label, i))
     return data
 
 # You don't need to change this funtion
@@ -70,7 +70,7 @@ def load_words(exs):
     words = set()
     word2ind = {kPAD: 0, kUNK: 1}
     ind2word = {0: kPAD, 1: kUNK}
-    for q_text, _ in exs:
+    for q_text, _, _ in exs:
         for w in q_text:
             words.add(w)
     words = sorted(words)
@@ -129,10 +129,12 @@ class QuestionDataset(Dataset):
     def __init__(self, examples, word2ind, num_classes, class2ind=None):
         self.questions = []
         self.labels = []
+        self.indcies = [] # index of sample in the data
 
-        for qq, ll in examples:
+        for qq, ll, indx in examples:
             self.questions.append(qq)
             self.labels.append(ll)
+            self.indcies.append(indx)
         
         # if type(self.labels[0])==str:
         for i in range(len(self.labels)):
@@ -145,7 +147,7 @@ class QuestionDataset(Dataset):
     ###You don't need to change this funtion
     def __getitem__(self, index):
         return self.vectorize(self.questions[index], self.word2ind), \
-          self.labels[index]
+          self.labels[index], self.indcies[index]
     
     ###You don't need to change this funtion
     def __len__(self):
@@ -192,9 +194,11 @@ def batchify(batch):
 
     question_len = list()
     label_list = list()
+    sample_indcies = list()
     for ex in batch:
         question_len.append(len(ex[0]))
         label_list.append(ex[1])
+        sample_indcies.append(ex[2])
 
     target_labels = torch.LongTensor(label_list)
     # initializing the input vector and pad the rest with zeros
@@ -203,7 +207,11 @@ def batchify(batch):
         question_text = batch[i][0]
         vec = torch.LongTensor(question_text)
         x1[i, :len(question_text)].copy_(vec)
-    q_batch = {'text': x1, 'len': torch.FloatTensor(question_len), 'labels': target_labels}
+
+    # label indceis
+    sample_indcies = torch.LongTensor(sample_indcies)
+    q_batch = {'text': x1, 'len': torch.FloatTensor(question_len), 
+            'sample_indcies': sample_indcies, 'labels': target_labels}
     return q_batch
 
 
@@ -557,12 +565,17 @@ if __name__ == "__main__":
     dev_exs = load_data(args.dev_file, -1)
     test_exs = load_data(args.test_file, -1)
 
-    ### Create vocab
+    ''' debug print'''
+    # print(train_exs[100][0]) # question
+    # print(train_exs[100][1]) # label
+    # print(train_exs[100][2]) # index
+
+    # Create vocab
     if args.use_glove:
-        print('Loading Glove Embeddings.......')
-        voc, word2ind, ind2word, glove_embeddings = load_glove(args.glove_weights)
+       print('Loading Glove Embeddings.......')
+       voc, word2ind, ind2word, glove_embeddings = load_glove(args.glove_weights)
     else:
-        voc, word2ind, ind2word = load_words(train_exs)
+       voc, word2ind, ind2word = load_words(train_exs)
 
     #get num_classes from training + dev examples - this can then also be used as int value for those test class labels not seen in training+dev.
     num_classes = len(list(set([ex[1] for ex in train_exs+dev_exs])))
@@ -640,6 +653,7 @@ if __name__ == "__main__":
         # print(train_sample['text'].shape) # [batch x 60]
         # print(train_sample['len'].shape) # [batch x 60]
         # print(train_sample['labels'].shape) # [batch]
+        # print(train_sample['sample_indcies'].shape) # [batch]
         # print(model(train_sample['text'],train_sample['len']).shape)
 
         ''' Training LOOOP'''
