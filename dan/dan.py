@@ -54,7 +54,8 @@ def load_data(filename, lim):
             #label = q['category']
             label = q['label']
             # label = q['page']
-            if label:
+            # if label : # Error bypassing label: 0
+            if label != None:
                 data.append((q_text, label))
     return data
 
@@ -81,6 +82,15 @@ def load_words(exs):
     return words, word2ind, ind2word
 
 def load_glove(weights_path):
+    '''
+    loading glove: vocab and embeddings
+    :param weights_pat: (str) a .txt file with embeddings and vocab
+    :return: (words, word_to_i, i_to_word, embeddings)
+        words: a set of words in vocab len=vocab
+        word_to_i: a (dict) {word: ind} len=vocab
+        i_to_word: a (list) of words len=vocab
+        embeddings: a tensor with shape=vocab x embed_dim
+    '''
     # Unkown token in i_to_word[-1] <unk> in orignal
     # weighs, but after adding padding i_to_word[<unk>]=-2
     # i_to_word[<pad>] = -1
@@ -196,34 +206,6 @@ def batchify(batch):
     q_batch = {'text': x1, 'len': torch.FloatTensor(question_len), 'labels': target_labels}
     return q_batch
 
-def evaluate_test(data_loader, model, device):
-    """
-    evaluate the current model, get the accuracy for dev/test set
-    Keyword arguments:
-    data_loader: pytorch build-in data loader output
-    model: model to be evaluated
-    device: cpu of gpu
-    """
-
-    model.eval()
-    num_examples = 0
-    error = 0
-    with torch.no_grad():
-        for idx, batch in enumerate(data_loader):
-            question_text = batch['text'].to(device)
-            question_len = batch['len']
-            labels = batch['labels']
-    
-            ####Your code here
-    
-            logits = model(question_text, question_len) # shape [batch x num_classes]
-            top_n, top_i = logits.topk(1)
-            num_examples += question_text.size(0)
-            error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
-    accuracy = 1 - error / num_examples
-    print('accuracy', accuracy)
-    return accuracy
-
 
 
 def evaluate(data_loader, model, loss_fun, device):
@@ -262,6 +244,8 @@ def evaluate(data_loader, model, loss_fun, device):
         avg_loss = total_loss/num_examples
     # print(f'Dev accuracy={accuracy:f}, Dev average Loss={avg_loss:f}')
     return accuracy, avg_loss
+
+
 
 def train(args, model, train_data_loader, dev_data_loader, accuracy, device):
     """
@@ -452,6 +436,57 @@ class DanModel(nn.Module):
 
         return logits
 
+def show_error_samples(data_loader, model, loss_fun,
+        ind2word_arr, device):
+    """
+    evaluate the current model, get the accuracy for dev/test set
+    Keyword arguments:
+    data_loader: pytorch build-in data loader output
+    model: model to be evaluated
+    device: cpu of gpu
+    """
+
+    model.eval()
+    num_examples = 0
+    error = 0
+
+    total_loss = 0.0
+    num_examples = 0
+    with torch.no_grad():
+        for idx, batch in enumerate(data_loader):
+            question_text = batch['text'].to(device)
+            question_len = batch['len']
+            labels = batch['labels']
+    
+            ####Your code here
+
+            logits = model(question_text, question_len) # shape [batch x num_classes]
+            _, top_i = logits.topk(1)
+            num_examples += question_text.size(0)
+            error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
+
+            ## Error samples
+            error_logits = logits[top_i.squeeze() != torch.LongTensor(labels)]
+            error_samples_text = question_text[top_i.squeeze() != torch.LongTensor(labels)]
+            error_samples_labels = labels[top_i.squeeze() != torch.LongTensor(labels)]
+
+            print(error_samples_text.shape)
+            print(error_samples_labels.shape)
+
+            for i in range(len(error_samples_text)):
+                print(ind2word_arr[error_samples_text[i]])
+
+
+            # Loss
+            total_loss += loss_fun(logits, labels).item()
+
+        # Accuracy
+        accuracy = 1 - error / num_examples
+        avg_loss = total_loss/num_examples
+    # print(f'Dev accuracy={accuracy:f}, Dev average Loss={avg_loss:f}')
+    return accuracy, avg_loss
+
+
 ''' ploting function '''
 def plot_model(train, test, num_epochs):
     '''
@@ -504,6 +539,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers", help="Number of workers", type=int, default=4, required=False)
     parser.add_argument('--use-glove', action='store_true', help='Wather to use glove or not', default=False)
     parser.add_argument("--glove-weights", help="Path to glove weights", type=str, default='', required=False)
+    parser.add_argument('--show-dev-error-samples', action='store_true', help='Print Error Dev samples', default=False)
 
     args = parser.parse_args()
     #### check if using gpu is available
@@ -511,7 +547,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if args.cuda else "cpu")
 
     # model name
-    if args.use_glove:
+    if args.use_glove and (not args.show_dev_error_samples):
         args.save_model= f'glove_{args.glove_weights.split(".")[-2]}_{args.save_model}'
     else:
         args.save_model = f'normal_50d_{args.save_model}'
@@ -530,7 +566,6 @@ if __name__ == "__main__":
 
     #get num_classes from training + dev examples - this can then also be used as int value for those test class labels not seen in training+dev.
     num_classes = len(list(set([ex[1] for ex in train_exs+dev_exs])))
-
     print('Number of Classes=', num_classes)
 
     #get class to int mapping
@@ -547,6 +582,23 @@ if __name__ == "__main__":
                                                 num_workers=args.num_workers,
                                                 collate_fn=batchify)
         evaluate(test_loader, model,nn.CrossEntropyLoss, device)
+
+    # show Error Dev Samples
+    elif args.show_dev_error_samples:
+        model = torch.load(args.load_model)
+        model.to(device)
+
+        dev_dataset = QuestionDataset(dev_exs, word2ind, num_classes, class2ind)
+        dev_sampler = torch.utils.data.sampler.SequentialSampler(dev_dataset)
+        dev_loader = torch.utils.data.DataLoader(dev_dataset, batch_size=args.batch_size,
+                                               sampler=dev_sampler,
+                                               num_workers=args.num_workers,
+                                               collate_fn=batchify)
+        # Applying Devset
+        dev_acc, dev_loss = show_error_samples(dev_loader, model,
+                        nn.CrossEntropyLoss(), np.array(ind2word), device)
+        print(f'Dev acc={dev_acc:f}, dev_error={dev_loss:f}')
+
     else:
         if args.resume:
             print('Resuming.....')
