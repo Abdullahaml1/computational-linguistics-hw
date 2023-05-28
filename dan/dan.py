@@ -446,7 +446,7 @@ class DanModel(nn.Module):
         return logits
 
 def show_error_samples(data_loader, model, loss_fun,
-        ind2word_arr, device):
+        ind2word_arr, ind2class, device):
     """
     evaluate the current model, get the accuracy for dev/test set
     Keyword arguments:
@@ -470,23 +470,30 @@ def show_error_samples(data_loader, model, loss_fun,
     
             ####Your code here
 
-            logits = model(question_text, question_len) # shape [batch x num_classes]
+            logits = model(question_text, question_len, is_prob=True) # shape [batch x num_classes]
             _, top_i = logits.topk(1)
             num_examples += question_text.size(0)
             error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
 
             ## Error samples
-            error_logits = logits[top_i.squeeze() != torch.LongTensor(labels)]
-            error_samples_text = question_text[top_i.squeeze() != torch.LongTensor(labels)]
-            error_samples_labels = labels[top_i.squeeze() != torch.LongTensor(labels)]
-            error_sample_indcies = sample_indcies[top_i.squeeze() != torch.LongTensor(labels)]
+            f = top_i.squeeze() != torch.LongTensor(labels)
+            error_logits = logits[f]
+            error_top_i =  top_i[f]
+            error_text = question_text[f]
+            error_labels = labels[f]
+            error_indcies = sample_indcies[f]
 
-            print(error_samples_text.shape)
-            print(error_samples_labels.shape)
+            # print(error_samples_text.shape)
+            # print(error_samples_labels.shape)
 
-            for i in range(len(error_samples_text)):
-                print(f'Sample index={error_sample_indcies[i]}')
-                print(ind2word_arr[error_samples_text[i]])
+            for i in range(len(error_text)):
+                print(f'Sample index={error_indcies[i]}')
+                print(ind2word_arr[error_text[i]])
+                print(f'worng class prob={error_logits[i][error_top_i[i]].item():f},' +
+                        f', correct label prob={error_logits[i][error_labels[i]].item():f}' +
+                        f', Wrong label={ind2class[error_top_i[i].item()]}' + 
+                        f', correct label={ind2class[error_labels[i].item()]}')
+                print('-------------------------')
                 print()
 
 
@@ -615,7 +622,9 @@ if __name__ == "__main__":
                                                collate_fn=batchify)
         # Applying Devset
         dev_acc, dev_loss = show_error_samples(dev_loader, model,
-                        nn.CrossEntropyLoss(), np.array(ind2word), device)
+                        nn.CrossEntropyLoss(),
+                        np.array(ind2word), ind2class,
+                        device)
         print(f'Dev acc={dev_acc:f}, dev_error={dev_loss:f}')
 
     else:
