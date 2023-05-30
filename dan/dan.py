@@ -20,6 +20,7 @@ random.seed(SEED)
 kUNK = '<unk>'
 kPAD = '<pad>'
 kPAD_IND = 0 # index of padding token
+kUNK_IND = 1
 
 # You don't need to change this funtion
 def class_labels(data):
@@ -457,10 +458,17 @@ def show_error_samples(data_loader, model, loss_fun,
 
     model.eval()
     num_examples = 0
-    error = 0
+    error_count = 0
+    ture_count = 0
 
     total_loss = 0.0
     num_examples = 0
+
+    avg_true_q_len= 0.0
+    avg_error_q_len= 0.0
+
+    avg_true_unk_count = 0
+    avg_error_unk_count = 0
     with torch.no_grad():
         for idx, batch in enumerate(data_loader):
             question_text = batch['text'].to(device)
@@ -468,12 +476,13 @@ def show_error_samples(data_loader, model, loss_fun,
             labels = batch['labels']
             sample_indcies = batch['sample_indcies']
     
-            ####Your code here
 
             logits = model(question_text, question_len, is_prob=True) # shape [batch x num_classes]
             _, top_i = logits.topk(1)
             num_examples += question_text.size(0)
-            error += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
+            error_count += torch.nonzero(top_i.squeeze() - torch.LongTensor(labels)).size(0)
+
+
 
             ## Error samples
             f = top_i.squeeze() != torch.LongTensor(labels)
@@ -482,6 +491,17 @@ def show_error_samples(data_loader, model, loss_fun,
             error_text = question_text[f]
             error_labels = labels[f]
             error_indcies = sample_indcies[f]
+
+            # Avg qustion Length
+            avg_true_q_len += question_len[~f].sum().item()
+            avg_error_q_len += question_len[f].sum().item()
+
+            # Avg unkown token count
+            uniq, counts = question_text[~f].unique(return_counts=True)
+            avg_true_unk_count += counts[uniq==kUNK_IND].item()
+
+            uniq, counts = question_text[f].unique(return_counts=True)
+            avg_error_unk_count += counts[uniq==kUNK_IND].item()
 
             # print(error_samples_text.shape)
             # print(error_samples_labels.shape)
@@ -500,8 +520,26 @@ def show_error_samples(data_loader, model, loss_fun,
             # Loss
             total_loss += loss_fun(logits, labels).item()
 
+
+
+
+        true_count = num_examples - error_count
+        print(true_count, error_count, avg_true_q_len, avg_error_q_len)
+
+        # Avg Questoin Length
+        avg_error_q_len /= error_count
+        avg_true_q_len /= true_count
+        print(f'Avg True Questoin Length={avg_true_q_len:f}' + 
+                f', Avg Error Question Length={avg_error_q_len:f}')
+
+        # Avg unkonw token counts per sample
+        avg_true_unk_count /= true_count
+        avg_error_unk_count /= error_count
+        print(f'Avg True unkonw token count={avg_true_unk_count:f}' + 
+                f', Avg Error unknow token count={avg_error_unk_count:f}')
+
         # Accuracy
-        accuracy = 1 - error / num_examples
+        accuracy = 1 - error_count / num_examples
         avg_loss = total_loss/num_examples
     # print(f'Dev accuracy={accuracy:f}, Dev average Loss={avg_loss:f}')
     return accuracy, avg_loss
@@ -589,6 +627,7 @@ if __name__ == "__main__":
     else:
        voc, word2ind, ind2word = load_words(train_exs)
     kPAD_IND = word2ind[kPAD]
+    kUNK_IND = word2ind[kUNK]
 
     #get num_classes from training + dev examples - this can then also be used as int value for those test class labels not seen in training+dev.
     num_classes = len(list(set([ex[1] for ex in train_exs+dev_exs])))
